@@ -7,12 +7,11 @@ import { getFirestore } from "firebase/firestore";
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  auth_domain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: "my-investment-tracker-ae5f1.firebasestorage.app",
-  messagingSenderId: "708582900906",
-  appId: "1:708582900906:web:297f67b3f80dab7cbdbcd3",
-  measurementId: "G-Y1L242YWTM"
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
