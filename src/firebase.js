@@ -6,9 +6,9 @@ import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAsENBJ8dL4IolYbmq4BQQhlflz2iupue8",
-  authDomain: "my-investment-tracker-ae5f1.firebaseapp.com",
-  projectId: "my-investment-tracker-ae5f1",
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  auth_domain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
   storageBucket: "my-investment-tracker-ae5f1.firebasestorage.app",
   messagingSenderId: "708582900906",
   appId: "1:708582900906:web:297f67b3f80dab7cbdbcd3",
