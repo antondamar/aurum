@@ -10,9 +10,11 @@ dist-ssr
 .idea
 .DS_Store
 
-# Environment variables (CRITICAL)
+# .gitignore
 .env
 .env.local
+.env.development.local
+.env.test.local
 .env.production.local
 
 # Firebase
