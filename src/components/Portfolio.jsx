@@ -29,6 +29,8 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
   const [searchResults, setSearchResults] = useState([]);
   const [priceUpdateTime, setPriceUpdateTime] = useState(null);
 
+  const [portfolioSettings, setPortfolioSettings] = useState({});
+
   const COLOR_OPTIONS = [
     '#F7931A', '#627EEA', '#004A99', '#003D79', '#D4AF37', 
     '#228B22', '#ED1C24', '#76B900', '#CED4DA', '#C0C0C0'
@@ -39,7 +41,8 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
       const defaultPortfolio = {
         id: Date.now(),
         name: 'Main Portfolio',
-        assets: []
+        assets: [],
+        countInDashboard: true
       };
       setPortfolios([defaultPortfolio]);
       setActivePortfolioId(defaultPortfolio.id);
@@ -291,13 +294,39 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
       const newP = {
         id: Date.now(),
         name: newPortfolioName.trim(),
-        assets: []
+        assets: [],
+        countInDashboard: true
       };
       setPortfolios([...portfolios, newP]);
       setActivePortfolioId(newP.id);
       setNewPortfolioName('');
       setIsAddingPortfolio(false);
     }
+  };
+
+  const deletePortfolio = (portfolioId) => {
+    if (portfolios.length <= 1) {
+      alert('Cannot delete the last portfolio. Create a new one first.');
+      return;
+    }
+    
+    if (!window.confirm('Are you sure you want to delete this portfolio? All assets within will be permanently removed.')) return;
+    
+    const updatedPortfolios = portfolios.filter(p => p.id !== portfolioId);
+    setPortfolios(updatedPortfolios);
+    
+    if (activePortfolioId === portfolioId && updatedPortfolios.length > 0) {
+      setActivePortfolioId(updatedPortfolios[0].id);
+    }
+  };
+
+  const toggleCountInDashboard = (portfolioId) => {
+    const updatedPortfolios = portfolios.map(p => 
+      p.id === portfolioId 
+        ? { ...p, countInDashboard: !p.countInDashboard } 
+        : p
+    );
+    setPortfolios(updatedPortfolios);
   };
 
   const COLORS = COLOR_OPTIONS;
@@ -387,11 +416,20 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
 
   // Handle asset selection from dropdown
   const handleAssetSelect = (selectedName) => {
+    if (selectedName === "new-asset") {
+      setIsAddingNewAsset(true);
+      return;
+    }
+    
     const assetInfo = getAssetInfo(selectedName);
+    
+    // Always use the standardized name from the asset library
+    const standardizedName = assetInfo?.name || selectedName;
+    
     setNewAsset({ 
       ...newAsset, 
-      name: selectedName, 
-      color: assetInfo?.color || getAssetColor(selectedName) // Gunakan getAssetColor sebagai fallback
+      name: standardizedName,  // Use standardized name
+      color: assetInfo?.color || getAssetColor(selectedName)
     });
   };
 
@@ -423,104 +461,174 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
     return COLOR_OPTIONS[0];
   };
 
+  const getCurrencyBreakdown = (asset) => {
+    if (!asset.currencyMix) return null;
+    
+    const totalValue = asset.value || (asset.avgBuy * asset.amount);
+    const currencies = Object.entries(asset.currencyMix)
+      .map(([currency, value]) => ({
+        currency,
+        percentage: (value / totalValue) * 100,
+        value
+      }))
+      .filter(item => item.percentage > 1); // Only show currencies with >1% allocation
+    
+    return currencies;
+  };
+
   const handleAddAsset = (e) => {
     e.preventDefault();
     const rawPrice = newAsset.buyPrice.replace(/[^0-9.]/g, '');
     if (!rawPrice || !newAsset.amount || !newAsset.name) return;
 
+    console.log('DEBUG: Adding asset with name:', newAsset.name);
+    
     const assetColor = newAsset.color || getAssetColor(newAsset.name);
-    const txPriceInUSD = parseFloat(rawPrice) / rates[newAsset.currency];
+    const txPriceInOriginalCurrency = parseFloat(rawPrice);
+    
+    // Convert to USD using the exchange rate at the time of transaction
+    const exchangeRateAtTransaction = rates[newAsset.currency] || 1;
+    const txPriceInUSD = txPriceInOriginalCurrency / exchangeRateAtTransaction;
+    
     const txQty = parseFloat(newAsset.amount);
-    const txValue = txPriceInUSD * txQty;
+    const txValueInUSD = txPriceInUSD * txQty;
 
     const assetInfo = getAssetInfo(newAsset.name);
+    
+    // Always use the standardized name from the asset library
+    const assetName = assetInfo?.name || newAsset.name;
+    
+    console.log('DEBUG: Standardized asset name:', assetName);
+    console.log('DEBUG: Active portfolio assets:', activePortfolio.assets.map(a => ({
+      name: a.name,
+      amount: a.amount
+    })));
+
     const currentMarketPrice = assetInfo?.type === 'crypto' ? 
-      realTimePrices[newAsset.name] || txPriceInUSD : 
+      realTimePrices[assetName] || txPriceInUSD : 
       txPriceInUSD;
 
-    const updatedPortfolios = portfolios.map(p => {
-      if (p.id === activePortfolioId) {
-        const existingAssetIndex = p.assets.findIndex(a => a.name === newAsset.name);
-        let newAssetsList = [...p.assets];
-
-        if (existingAssetIndex !== -1) {
-          const asset = newAssetsList[existingAssetIndex];
-          if (newAsset.type === 'BUY') {
-            const totalCost = (asset.avgBuy * asset.amount) + txValue;
-            const newAmount = asset.amount + txQty;
-            
-            // Update transactions array
-            const newTransactions = [
-              ...(asset.transactions || []),
-              {
-                id: Date.now(),
-                date: newAsset.purchaseDate,
-                type: 'BUY',
-                price: txPriceInUSD,
-                amount: txQty,
-                value: txValue
-              }
-            ];
-            
-            newAssetsList[existingAssetIndex] = {
-              ...asset,
-              amount: newAmount,
-              value: currentMarketPrice * newAmount,
-              avgBuy: totalCost / newAmount,
-              color: newAsset.color,
-              transactions: newTransactions,
-              purchaseDate: asset.purchaseDate || newAsset.purchaseDate // Keep earliest date
-            };
-          } else {
-            const newAmount = Math.max(0, asset.amount - txQty);
-            
-            // Add sell transaction
-            const newTransactions = [
-              ...(asset.transactions || []),
-              {
-                id: Date.now(),
-                date: newAsset.purchaseDate,
-                type: 'SELL',
-                price: txPriceInUSD,
-                amount: txQty,
-                value: txValue
-              }
-            ];
-            
-            newAssetsList[existingAssetIndex] = {
-              ...asset,
-              amount: newAmount,
-              value: currentMarketPrice * newAmount,
-              color: newAsset.color,
-              transactions: newTransactions
-            };
+    // Create a deep copy of portfolios
+    const updatedPortfolios = JSON.parse(JSON.stringify(portfolios));
+    
+    // Find the portfolio to update
+    const portfolioIndex = updatedPortfolios.findIndex(p => p.id === activePortfolioId);
+    if (portfolioIndex === -1) return;
+    
+    const portfolio = updatedPortfolios[portfolioIndex];
+    
+    // Find if asset already exists (using standardized name)
+    const existingAssetIndex = portfolio.assets.findIndex(a => a.name === assetName);
+    
+    console.log('DEBUG: Existing asset index:', existingAssetIndex);
+    
+    if (existingAssetIndex !== -1) {
+      // Asset exists - aggregate
+      const existingAsset = portfolio.assets[existingAssetIndex];
+      console.log('DEBUG: Found existing asset:', existingAsset);
+      
+      if (newAsset.type === 'BUY') {
+        // Calculate new total cost and amount for BUY
+        const existingCostUSD = existingAsset.avgBuy * existingAsset.amount;
+        const newTotalCostUSD = existingCostUSD + txValueInUSD;
+        const newTotalAmount = existingAsset.amount + txQty;
+        
+        // Create new transaction record
+        const newTransaction = {
+          id: Date.now(),
+          date: newAsset.purchaseDate,
+          type: 'BUY',
+          price: txPriceInOriginalCurrency,
+          priceUSD: txPriceInUSD,
+          currency: newAsset.currency,
+          exchangeRate: exchangeRateAtTransaction,
+          amount: txQty,
+          value: txValueInUSD
+        };
+        
+        // Update the existing asset
+        portfolio.assets[existingAssetIndex] = {
+          ...existingAsset,
+          amount: newTotalAmount,
+          value: currentMarketPrice * newTotalAmount,
+          avgBuy: newTotalCostUSD / newTotalAmount,
+          color: newAsset.color || existingAsset.color,
+          transactions: [...(existingAsset.transactions || []), newTransaction],
+          purchaseDate: existingAsset.purchaseDate || newAsset.purchaseDate,
+          currencyMix: {
+            ...(existingAsset.currencyMix || {}),
+            [newAsset.currency]: (existingAsset.currencyMix?.[newAsset.currency] || 0) + txValueInUSD
           }
-        } else if (newAsset.type === 'BUY') {
-          newAssetsList.push({
-            id: Date.now(),
-            name: assetInfo.name,
-            symbol: assetInfo.symbol,
-            value: currentMarketPrice * txQty,
-            avgBuy: txPriceInUSD,
-            amount: txQty,
-            color: assetColor,
-            purchaseDate: newAsset.purchaseDate, // Save purchase date
-            transactions: [{
-              id: Date.now(),
-              date: newAsset.purchaseDate,
-              type: 'BUY',
-              price: txPriceInUSD,
-              amount: txQty,
-              value: txValue
-            }]
-          });
+        };
+        
+        console.log('DEBUG: Updated asset:', portfolio.assets[existingAssetIndex]);
+      } else {
+        // SELL transaction
+        const newAmount = Math.max(0, existingAsset.amount - txQty);
+        
+        // Create sell transaction record
+        const newTransaction = {
+          id: Date.now(),
+          date: newAsset.purchaseDate,
+          type: 'SELL',
+          price: txPriceInOriginalCurrency,
+          priceUSD: txPriceInUSD,
+          currency: newAsset.currency,
+          exchangeRate: exchangeRateAtTransaction,
+          amount: txQty,
+          value: txValueInUSD
+        };
+        
+        portfolio.assets[existingAssetIndex] = {
+          ...existingAsset,
+          amount: newAmount,
+          value: currentMarketPrice * newAmount,
+          transactions: [...(existingAsset.transactions || []), newTransaction]
+        };
+        
+        // If amount becomes 0, remove the asset
+        if (newAmount === 0) {
+          portfolio.assets.splice(existingAssetIndex, 1);
         }
-        return { ...p, assets: newAssetsList };
       }
-      return p;
-    });
-
+    } else if (newAsset.type === 'BUY') {
+      // Create new asset
+      const newAssetData = {
+        id: Date.now(),
+        name: assetName,  // Use standardized name
+        symbol: assetInfo?.symbol || '',
+        value: currentMarketPrice * txQty,
+        avgBuy: txPriceInUSD,
+        amount: txQty,
+        color: assetColor,
+        purchaseDate: newAsset.purchaseDate,
+        transactions: [{
+          id: Date.now(),
+          date: newAsset.purchaseDate,
+          type: 'BUY',
+          price: txPriceInOriginalCurrency,
+          priceUSD: txPriceInUSD,
+          currency: newAsset.currency,
+          exchangeRate: exchangeRateAtTransaction,
+          amount: txQty,
+          value: txValueInUSD
+        }],
+        currencyMix: { [newAsset.currency]: txValueInUSD }
+      };
+      
+      portfolio.assets.push(newAssetData);
+      console.log('DEBUG: Created new asset:', newAssetData);
+    }
+    
+    // Update the portfolio in the array
+    updatedPortfolios[portfolioIndex] = portfolio;
+    
+    console.log('DEBUG: Final portfolio assets:', portfolio.assets);
+    
+    // Update state
     setPortfolios(updatedPortfolios);
+    
+    // Reset form
     setNewAsset({ 
       name: 'Bitcoin (BTC)', 
       buyPrice: '', 
@@ -528,7 +636,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
       currency: 'USD', 
       type: 'BUY',
       color: null,
-      purchaseDate: new Date().toISOString().split('T')[0] // Reset to today
+      purchaseDate: new Date().toISOString().split('T')[0]
     });
   };
 
@@ -608,12 +716,13 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
 
   return (
     <div className="pt-10 px-8 max-w-7xl mx-auto pb-32">
+      <title>Portfolio</title>
       <header className="mb-8">
         <h1 className="text-5xl font-extrabold tracking-tighter mb-6">
           Asset <span className="gold-text">Allocation</span>
         </h1>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mb-2">
           {!isAddingPortfolio ? (
             <>
               <div className="relative group">
@@ -634,12 +743,28 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
               <button 
                 onClick={() => setIsAddingPortfolio(true)}
                 className="bg-white/5 hover:bg-white/10 border border-white/10 text-white p-2 rounded-lg transition-all"
+                title="Add Portfolio"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
               </button>
+              
+              {portfolios.length > 1 && (
+                <button 
+                  onClick={() => deletePortfolio(activePortfolioId)}
+                  className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 p-2 rounded-lg transition-all"
+                  title="Delete Portfolio"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </button>
+              )}
             </>
           ) : (
             <div className="flex items-center gap-2 animate-in fade-in zoom-in duration-200">
@@ -657,6 +782,30 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
             </div>
           )}
         </div>
+        
+        {/* Portfolio Settings Row */}
+        {portfolios.length > 0 && !isAddingPortfolio && (
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="countInDashboard"
+                checked={activePortfolio.countInDashboard !== false}
+                onChange={() => toggleCountInDashboard(activePortfolioId)}
+                className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-[#D3AC2C] focus:ring-[#D3AC2C] focus:ring-2 focus:ring-offset-0"
+              />
+              <label htmlFor="countInDashboard" className="text-zinc-400 cursor-pointer">
+                Include in Dashboard calculations
+              </label>
+            </div>
+            <span className="text-xs text-zinc-300">
+              {activePortfolio.assets?.length || 0} assets • {formatValue(
+                activePortfolio.assets?.reduce((sum, a) => sum + (a.value || 0), 0) || 0, 
+                currency
+              )}
+            </span>
+          </div>
+        )}
       </header>
 
       {/* Price Update Status Bar */}
@@ -841,6 +990,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
 
                       {/* Average Buy Price */}
                       <td className="py-6 text-zinc-500">{formatValue(item.avgBuy, currency)}</td>
+                    
                     </tr>
                   );
                 })
@@ -1191,7 +1341,14 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
           <div className="lg:col-span-4 flex justify-end">
             <button 
               type="submit" 
-              className="bg-[#D3AC2C] text-black font-bold px-10 py-4 rounded-xl hover:bg-[#A57A03] transition-all disabled:opacity-50"
+              
+              className="relative overflow-hidden bg-gradient-to-br from-[#F9E08B] via-[#D3AC2C] to-[#A57A03] 
+             text-black font-bold px-10 py-4 rounded-xl transition-all 
+             disabled:opacity-50 hover:brightness-110 active:scale-[0.98] 
+             shadow-lg shadow-[#D3AC2C]/20 border border-[#F9E08B]/30 
+             before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+             before:via-white/20 before:to-transparent before:translate-x-[-100%] 
+             hover:before:translate-x-[100%] before:transition-transform before:duration-700"
               disabled={!newAsset.name || !newAsset.buyPrice || !newAsset.amount}
             >
               Add to Portfolio

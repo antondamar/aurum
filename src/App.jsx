@@ -12,6 +12,7 @@ import Portfolio from './components/Portfolio';
 import AssetHistory from './components/AssetHistory';
 import Auth from './components/Auth'; 
 import Profile from './components/Profile';
+import ScrollToTop from './components/ScrollToTop';
 
 // Komponen Footer
 const Footer = () => {
@@ -100,24 +101,6 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    const syncData = async () => {
-      // HANYA simpan jika data sudah selesai di-load dari cloud
-      if (user && isDataLoaded) { 
-        console.log("Saving changes to Firestore...");
-        const docRef = doc(db, "users", user.uid);
-        await setDoc(docRef, {
-          portfolios,
-          assetMasterList,
-          ...profileData,
-          lastUpdated: new Date().toISOString()
-        }, { merge: true });
-      }
-    };
-    syncData();
-  }, [portfolios, assetMasterList, profileData, user, isDataLoaded]);
-    
-
   // Add this debug effect to monitor state
   useEffect(() => {
     console.log("Current state:", {
@@ -128,59 +111,30 @@ function App() {
     });
   }, [loading, user, portfolios, assetMasterList]);
 
+  // --- CONSOLIDATED CLOUD SYNC ---
   useEffect(() => {
     const syncData = async () => {
       if (user && isDataLoaded) { 
-        console.log("Saving changes to Firestore...");
         try {
           const docRef = doc(db, "users", user.uid);
           await setDoc(docRef, {
             portfolios,
             assetMasterList,
+            ...profileData,
             lastUpdated: new Date().toISOString()
           }, { merge: true });
-          console.log("Data saved successfully!");
+          console.log("✅ Cloud Sync Successful");
         } catch (error) {
-          console.error("Error saving to Firestore:", error);
+          console.error("❌ Cloud Sync Error:", error);
         }
       }
     };
-    syncData();
-  }, [portfolios, assetMasterList, user, isDataLoaded]);
 
-  useEffect(() => {
-    const syncData = async () => {
-      if (user && isDataLoaded) { 
-        console.log("Attempting to save data:", {
-          user: user.email,
-          portfoliosCount: portfolios.length,
-          assetMasterListCount: assetMasterList.length,
-          isDataLoaded
-        });
-        
-        try {
-          const docRef = doc(db, "users", user.uid);
-          await setDoc(docRef, {
-            portfolios,
-            assetMasterList,
-            lastUpdated: new Date().toISOString()
-          }, { merge: true });
-          console.log("✅ Data saved successfully to Firestore!");
-        } catch (error) {
-          console.error("❌ Error saving to Firestore:", error);
-          console.error("Error details:", error.code, error.message);
-        }
-      } else {
-        console.log("Not saving because:", { 
-          user: !!user, 
-          isDataLoaded,
-          reason: !user ? "No user" : "Data not loaded yet"
-        });
-      }
-    };
-    syncData();
-  }, [portfolios, assetMasterList, user, isDataLoaded]);
+    // Debounce: Wait 1 second after changes stop before saving
+    const timeoutId = setTimeout(syncData, 1000);
+    return () => clearTimeout(timeoutId);
 
+  }, [portfolios, assetMasterList, profileData, user, isDataLoaded]);
 
   // Layar Loading Awal
   // Change your loading check to add a timeout:
@@ -246,6 +200,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <div className="min-h-screen text-white font-sans relative overflow-x-hidden">
         <LiquidBackground />
         
@@ -294,9 +249,6 @@ function App() {
                     <h1 className="text-7xl font-extrabold tracking-tighter text-white">
                       {currentView} <span className="text-zinc-700">/ Soon</span>
                     </h1>
-                    <p className="text-zinc-500 mt-4 tracking-widest uppercase text-xs font-bold">
-                      Section under development
-                    </p>
                   </div>
                 )
               } />

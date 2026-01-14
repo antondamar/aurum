@@ -14,27 +14,105 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
     price: '',
     amount: '',
     date: '',
-    editCurrency: 'USD' // New: Currency for editing
+    editCurrency: 'USD'
   });
   const [hoveredCurrency, setHoveredCurrency] = useState(null);
   const [isHoveringSwitcher, setIsHoveringSwitcher] = useState(false);
-  const [localCurrency, setLocalCurrency] = useState(currency); // Local state for this page
+  const [localCurrency, setLocalCurrency] = useState(currency);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // Move portfolio and asset declarations FIRST, before any effects that use them
   const portfolio = useMemo(() => 
-    portfolios.find(p => p.id === parseInt(portfolioId)),
+    portfolios?.find(p => String(p.id) === String(portfolioId)) || null,
     [portfolios, portfolioId]
   );
 
   const asset = useMemo(() => 
-    portfolio?.assets.find(a => a.id === parseInt(assetId)),
+    portfolio?.assets?.find(a => String(a.id) === String(assetId)) || null,
     [portfolio, assetId]
   );
 
   const assetInfo = useMemo(() => {
-    return ASSET_LIBRARY.find(a => 
-      (asset?.symbol && a.symbol === asset.symbol) || a.name === asset?.name
-    );
+    if (!asset) return null;
+    
+    // Try multiple lookup strategies
+    const strategies = [
+      // 1. Exact match by name
+      () => ASSET_LIBRARY.find(a => a.name.toLowerCase() === asset.name.toLowerCase()),
+      
+      // 2. Exact match by symbol
+      () => ASSET_LIBRARY.find(a => a.symbol?.toLowerCase() === asset.symbol?.toLowerCase()),
+      
+      // 3. Match name without parentheses
+      () => {
+        const cleanName = asset.name.replace(/\s*\([^)]*\)$/, '').trim();
+        return ASSET_LIBRARY.find(a => a.name.toLowerCase() === cleanName.toLowerCase());
+      },
+      
+      // 4. Match symbol in parentheses
+      () => {
+        const symbolMatch = asset.name.match(/\(([^)]+)\)/);
+        if (symbolMatch) {
+          const symbol = symbolMatch[1];
+          return ASSET_LIBRARY.find(a => a.symbol?.toLowerCase() === symbol.toLowerCase());
+        }
+        return null;
+      },
+      
+      // 5. Partial name match
+      () => ASSET_LIBRARY.find(a => 
+        asset.name.toLowerCase().includes(a.name.toLowerCase()) || 
+        a.name.toLowerCase().includes(asset.name.toLowerCase())
+      ),
+      
+      // 6. For Bitcoin specifically
+      () => {
+        const lowerName = asset.name.toLowerCase();
+        if (lowerName.includes('bitcoin') || lowerName.includes('btc')) {
+          return ASSET_LIBRARY.find(a => a.symbol === 'BTC' || a.name === 'Bitcoin');
+        }
+        return null;
+      }
+    ];
+    
+    // Try each strategy in order
+    for (const strategy of strategies) {
+      const result = strategy();
+      if (result) return result;
+    }
+    
+    return null;
   }, [asset]);
+
+  // Now effects that depend on portfolio/asset can be defined AFTER their declarations
+  useEffect(() => {
+    console.log("AssetHistory Debug:", {
+      portfolioId,
+      assetId,
+      portfolio,
+      asset,
+      assetName: asset?.name,
+      assetSymbol: asset?.symbol,
+      assetInfo
+    });
+    
+    if (portfolio && asset) {
+      setIsLoading(false);
+      setError(null);
+    } else if (!portfolio) {
+      setError('Portfolio not found');
+      setIsLoading(false);
+    } else if (!asset) {
+      setError('Asset not found');
+      setIsLoading(false);
+    }
+  }, [portfolio, asset, assetInfo, portfolioId, assetId]);
+
+  // Update local currency when prop changes
+  useEffect(() => {
+    setLocalCurrency(currency);
+  }, [currency]);
 
   // Format value dengan kurs
   const formatValue = useCallback((val, targetCurrency = localCurrency) => {
@@ -214,13 +292,50 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
     }
   };
 
-  // Update local currency when prop changes
-  useEffect(() => {
-    setLocalCurrency(currency);
-  }, [currency]);
+  // Loading and error states
+  if (isLoading) {
+    return (
+      <div className="pt-10 px-8 max-w-7xl mx-auto pb-32 flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#D3AC2C] mb-4"></div>
+          <p className="text-zinc-400">Loading asset data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="pt-10 px-8 max-w-7xl mx-auto pb-32">
+        <div className="text-center py-20">
+          <p className="text-2xl font-bold text-red-500 mb-4">{error}</p>
+          <p className="text-zinc-400 mb-6">The asset you're looking for doesn't exist or has been removed.</p>
+          <button
+            onClick={() => navigate(`/portfolio`)}
+            className="bg-[#D3AC2C] text-black font-bold px-6 py-3 rounded-lg hover:bg-[#A57A03] transition-all"
+          >
+            Return to Portfolio
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!portfolio || !asset) {
-    return <div className="p-20 text-white">Asset not found.</div>;
+    return (
+      <div className="pt-10 px-8 max-w-7xl mx-auto pb-32">
+        <div className="text-center py-20">
+          <p className="text-2xl font-bold text-red-500 mb-4">Asset Not Found</p>
+          <p className="text-zinc-400 mb-6">The asset you're looking for doesn't exist or has been removed.</p>
+          <button
+            onClick={() => navigate(`/portfolio`)}
+            className="bg-[#D3AC2C] text-black font-bold px-6 py-3 rounded-lg hover:bg-[#A57A03] transition-all"
+          >
+            Return to Portfolio
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Hitung PnL untuk header
@@ -230,6 +345,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
 
   return (
     <div className="pt-10 px-8 max-w-7xl mx-auto pb-32">
+      <title>History</title>
       {/* Header Navigasi */}
       <div className="flex items-center justify-between mb-12">
         <button
@@ -405,7 +521,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
               </thead>
 
               <tbody className="divide-y divide-zinc-900">
-                {asset.transactions
+                {(asset.transactions ? [...asset.transactions] : [])
                   .sort((a, b) => new Date(b.date) - new Date(a.date))
                   .map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-white/[0.01]">

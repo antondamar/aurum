@@ -25,14 +25,16 @@ const Auth = () => {
   const findUserByUsername = async (username) => {
     try {
       const usersRef = collection(db, "users");
-      const q = query(usersRef, where("username", "==", username));
-      const querySnapshot = await getDocs(q);
+      // Convert input to lowercase to match the standardized format
+      const q1 = query(usersRef, where("username", "==", username.trim().toLowerCase()));
+      const querySnapshot = await getDocs(q1);
       
       if (!querySnapshot.empty) {
         const userDoc = querySnapshot.docs[0];
         return {
           email: userDoc.data().email,
-          userId: userDoc.id
+          userId: userDoc.id,
+          username: userDoc.data().username
         };
       }
       return null;
@@ -41,6 +43,7 @@ const Auth = () => {
       return null;
     }
   };
+
 
   // Fungsi untuk cek apakah email sudah terdaftar
   const checkEmailExists = async (email) => {
@@ -129,12 +132,13 @@ const Auth = () => {
         const user = userCredential.user;
         
         // Initialize data in Firestore dengan profile data
+        const sanitizedUsername = username.trim().toLowerCase();
         const userDocRef = doc(db, "users", user.uid);
         await setDoc(userDocRef, {
           portfolios: [],
           assetMasterList: [],
           email: user.email,
-          username: username,
+          username: sanitizedUsername,
           firstName: firstName,
           lastName: lastName,
           createdAt: new Date().toISOString(),
@@ -146,6 +150,7 @@ const Auth = () => {
         
       } else {
         let loginEmail = email;
+        let isUsernameLogin = false;
         
         if (!email.includes('@')) {
           const foundUser = await findUserByUsername(email);
@@ -154,16 +159,23 @@ const Auth = () => {
             return;
           }
           loginEmail = foundUser.email;
+          isUsernameLogin = true;
+        }
+
+        if (isUsernameLogin) {
+          console.log(`Logging in with username: ${email} -> email: ${loginEmail}`);
         }
         
         await signInWithEmailAndPassword(auth, loginEmail, password);
       }
     } catch (error) {
       // Handle registration errors
-      if (error.code === 'auth/email-already-in-use') {
-        setError('Email already in use');
-      } else if (error.code === 'auth/weak-password') {
-        setError('Password should be at least 6 characters');
+      if (error.code === 'auth/user-not-found') {
+        setError(isUsernameLogin ? 'Username not found' : 'Email not found');
+      } else if (error.code === 'auth/wrong-password') {
+        setError('Incorrect password');
+      } else if (error.code === 'auth/invalid-email') {
+        setError('Invalid email format');
       } else {
         setError(error.message);
       }
@@ -171,18 +183,20 @@ const Auth = () => {
   };
 
   const getPasswordStrength = (pass) => {
-    let score = 0;
     if (!pass) return 0;
+    
+    let score = 0;
     if (pass.length > 6) score++;
-    if (/[A-Z]/.test(pass)) score++; // Has uppercase
-    if (/[0-9]/.test(pass)) score++; // Has number
-    if (/[^A-Za-z0-9]/.test(pass)) score++; // Has special char
-    return score;
+    if (/[A-Z]/.test(pass)) score++;
+    if (/[0-9]/.test(pass)) score++;
+    if (/[^A-Za-z0-9]/.test(pass)) score++;
+    
+    return score; // 0-4
   };
 
   const strength = getPasswordStrength(password);
-  const strengthLabel = ['Weak', 'Fair', 'Good', 'Strong'];
-  const strengthColor = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500'];
+  const strengthLabel = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+  const strengthColor = ['bg-red-500', 'bg-red-400', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500'];
 
   const handlePasswordReset = async (e) => {
     e.preventDefault();
@@ -241,7 +255,8 @@ const Auth = () => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[80vh] text-white">
-      <div className="mb-8 text-center">
+      <title>Login</title>
+      <div className="mb-8 text-center mt-5">
         <h2 className="text-4xl font-extrabold tracking-tighter">
           <span className="text-[#D3AC2C]">Aurum</span> Tracker
         </h2>
@@ -359,13 +374,49 @@ const Auth = () => {
             <label className="text-[10px] font-bold text-zinc-500 tracking-widest uppercase ml-1">Password</label>
             <div className="relative">
               <input 
-                type={showPassword ? "text" : "password"}
+                type={showPassword ? "text" : "password"} // Logic to toggle type
+                placeholder="••••••••••"
                 className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              {/* The Eye Toggle Button */}
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-zinc-500 hover:text-white"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
+
+          {isRegistering && password && (
+            <div className="mt-2 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Strength</span>
+                <span className={`text-[10px] font-bold ${strengthColor[strength].replace('bg-', 'text-')}`}>
+                  {strengthLabel[strength]}
+                </span>
+              </div>
+              <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-500 ${strengthColor[strength]}`}
+                  style={{ width: `${(strength + 1) * 20}%` }} 
+                />
+              </div>
+            </div>
+          )}
 
           {/* Confirm Password field - hanya untuk register */}
           {isRegistering && (
@@ -407,7 +458,15 @@ const Auth = () => {
             </div>
           )}
 
-          <button type="submit" className="w-full bg-[#D3AC2C] text-black font-bold py-4 rounded-xl hover:bg-[#b89624] transition-all shadow-lg shadow-[#D3AC2C]/10">
+          <button 
+            type="submit" 
+            className="w-full relative overflow-hidden font-bold py-4 rounded-xl transition-all shadow-lg 
+                      text-black uppercase tracking-widest
+                      bg-gradient-to-br from-[#F9E08B] via-[#D3AC2C] to-[#A57A03]
+                      hover:brightness-110 active:scale-[0.98] 
+                      before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent before:translate-x-[-100%] hover:before:translate-x-[100%] before:transition-transform before:duration-700
+                      shadow-[#D3AC2C]/20 border border-[#F9E08B]/30"
+          >
             {isRegistering ? 'SIGN UP' : 'LOGIN'}
           </button>
 

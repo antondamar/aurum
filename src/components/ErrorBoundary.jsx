@@ -18,6 +18,7 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <div className="h-screen bg-black flex flex-col items-center justify-center">
+          <title>404</title>
           <h2 className="text-3xl font-extrabold tracking-tighter text-red-500 mb-2">Something went wrong</h2>
           <p className="text-zinc-400 mb-6">{this.state.error?.message || 'Unknown error'}</p>
           <button 
