@@ -33,7 +33,7 @@ const Footer = () => {
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [currentView, setCurrentView] = useState('Home');
+  const [currentView, setCurrentView] = useState(localStorage.getItem('currentView') || 'Home');
 
   // --- DATA STATE ---
   const [assetMasterList, setAssetMasterList] = useState([]);
@@ -41,6 +41,11 @@ function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   const [profileData, setProfileData] = useState({ username: '', firstName: '', lastName: '' });
+
+  // Add a useEffect to save the view whenever it changes
+  useEffect(() => {
+    localStorage.setItem('currentView', currentView);
+  }, [currentView]);
 
   // Generate a unique ID for this tab
   useEffect(() => {
@@ -59,6 +64,17 @@ function App() {
       
       if (currentUser) {
         console.log("User logged in, fetching data...");
+        // Check if this is a fresh login or just a refresh
+        const isSessionActive = sessionStorage.getItem('isSessionActive');
+
+        if (!isSessionActive) {
+          // --- FRESH LOGIN CASE ---
+          // Force the user to the Home page
+          setCurrentView('Home');
+          localStorage.setItem('currentView', 'Home');
+          // Mark the session as active so refreshes don't trigger this again
+          sessionStorage.setItem('isSessionActive', 'true');
+        }
         try {
           const docRef = doc(db, "users", currentUser.uid);
           const docSnap = await getDoc(docRef);
@@ -89,7 +105,6 @@ function App() {
             setPortfolios([]);
             setAssetMasterList([]);
           }
-          setCurrentView('Home');
           setIsDataLoaded(true);
         } catch (error) {
           console.error("Error loading user data:", error);
@@ -100,6 +115,8 @@ function App() {
         setAssetMasterList([]);
         setProfileData({ username: '', firstName: '', lastName: '' });
         setCurrentView('Home');
+        sessionStorage.removeItem('isSessionActive');
+        localStorage.setItem('currentView', 'Home');
       }
       
       setUser(currentUser);
@@ -129,7 +146,8 @@ function App() {
       if (user && isDataLoaded) { 
         const currentTabId = sessionStorage.getItem('tabId');
         const lastSource = localStorage.getItem('lastProfileUpdateSource');
-
+        
+        localStorage.setItem('lastProfileUpdateSource', currentTabId);
         // Only sync if this tab is the one that made the change
         if (lastSource !== currentTabId && lastSource !== null) return;
 
@@ -279,7 +297,6 @@ function App() {
             <Navigate to="/" replace={true} />
           )}
           <Navbar setView={setCurrentView} currentView={currentView} profileData={profileData} />
-
             <main className="max-w-6xl mx-auto px-6 pb-0 relative z-10">
             <Routes>
               <Route path="/" element={

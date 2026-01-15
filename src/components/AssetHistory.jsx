@@ -444,7 +444,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
         {[
           { label: 'Average Buy Price', val: formatValue(asset.avgBuy), color: 'text-white' },
-          { label: 'Cost Basis', val: formatValue(costBasis), color: 'text-zinc-400' },
+          { label: 'Cost Basis', val: formatValue(costBasis), color: 'text-white' },
           { label: 'Current Price', val: formatValue(asset.value / asset.amount), color: 'text-[#D3AC2C]' },
           { label: 'Purchase Date', val: formatDate(asset.purchaseDate), color: 'text-white' },
         ].map((stat, i) => (
@@ -674,7 +674,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                               <button
                                 onClick={() => saveTransactionEdit(transaction.id)}
                                 className="relative overflow-hidden px-4 py-2 bg-gradient-to-br from-[#4ADE80] via-[#22C55E] to-[#15803D] 
-                                          text-black text-[10px] font-black uppercase tracking-widest rounded-lg transition-all 
+                                          text-black text-[12px] font-black tracking-widest rounded-lg transition-all 
                                           hover:brightness-110 active:scale-[0.95] shadow-lg shadow-green-500/20 border border-[#4ADE80]/30
                                           before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
                                           before:via-white/30 before:to-transparent before:translate-x-[-100%] 
@@ -695,7 +695,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                                   });
                                 }}
                                 className="relative overflow-hidden px-3 py-2 bg-gradient-to-br from-[#2D3748] via-[#4A5568] to-[#1A202C] 
-                                          text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all 
+                                          text-white text-[12px] font-black tracking-widest rounded-lg transition-all 
                                           hover:brightness-125 active:scale-[0.95] shadow-lg shadow-gray-900/50 border border-gray-700/50
                                           before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
                                           before:via-white/20 before:to-transparent before:translate-x-[-100%] 
@@ -715,7 +715,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                               <button
                                 onClick={() => startEditTransaction(transaction)}
                                 className="relative overflow-hidden px-3 py-2 bg-gradient-to-br from-[#2D3748] via-[#4A5568] to-[#1A202C] 
-                                          text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all 
+                                          text-white text-[12px] font-black tracking-widest rounded-lg transition-all 
                                           hover:brightness-125 active:scale-[0.95] shadow-lg shadow-gray-900/50 border border-gray-700/50
                                           before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
                                           before:via-white/20 before:to-transparent before:translate-x-[-100%] 
@@ -727,7 +727,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                               <button
                                 onClick={() => removeTransaction(transaction.id)}
                                 className="relative overflow-hidden px-3 py-2 bg-gradient-to-br from-[#7B341E] via-[#9C4221] to-[#652B19] 
-                                          text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all 
+                                          text-white text-[12px] font-black tracking-widest rounded-lg transition-all 
                                           hover:brightness-125 active:scale-[0.95] shadow-lg shadow-red-900/50 border border-red-800/50
                                           before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
                                           before:via-white/20 before:to-transparent before:translate-x-[-100%] 

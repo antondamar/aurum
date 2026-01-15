@@ -244,7 +244,23 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         return p;
       });
 
-      setPortfolios(updatedPortfolios);
+      setPortfolios(prevPortfolios => 
+        prevPortfolios.map(p => {
+          if (p.id === activePortfolioId) {
+            return {
+              ...p,
+              assets: p.assets.map(a => {
+                const currentPrice = newPrices[a.name] || (a.value / a.amount);
+                return {
+                  ...a,
+                  value: currentPrice * a.amount
+                };
+              })
+            };
+          }
+          return p;
+        })
+      );
       setPriceUpdateTime(new Date().toLocaleTimeString());
       
     } catch (error) {
