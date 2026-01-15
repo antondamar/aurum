@@ -511,7 +511,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
             <table className="w-full tabular-nums">
               <thead className="text-zinc-600 text-[10px] tracking-widest uppercase border-b border-zinc-900">
                 <tr>
-                  <th className="pb-4 text-left pl-6">Date</th>
+                  <th className="pb-4 text-center">Date</th>
                   <th className="pb-4 text-center">Type</th>
                   <th className="pb-4 text-center">Price</th>
                   <th className="pb-4 text-center">Amount</th>
@@ -526,7 +526,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                   .map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-white/[0.01]">
                       {/* DATE */}
-                      <td className="py-6 pl-6 text-left text-white font-medium">
+                      <td className="py-6 text-center text-white font-medium">
                         {editingTxId === transaction.id ? (
                           <input
                             type="date"
@@ -542,36 +542,45 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                       {/* TYPE - EDITABLE */}
                       <td className="py-6 text-center">
                         {editingTxId === transaction.id ? (
-                          <div className="flex gap-1 justify-center">
+                          <div className="flex gap-2 justify-center">
+                            {/* METALLIC GREEN BUY BUTTON */}
                             <button
                               onClick={() => setEditFormData({...editFormData, type: 'BUY'})}
-                              className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                                editFormData.type === 'BUY' 
-                                  ? 'bg-green-500/20 text-green-500 border border-green-500/30' 
-                                  : 'bg-green-500/10 text-green-500/50 hover:bg-green-500/15'
-                              }`}
+                              className={`px-4 py-1.5 rounded-full text-[12px] font-black transition-all relative overflow-hidden tracking-widest
+                                ${editFormData.type === 'BUY' 
+                                  ? 'bg-gradient-to-br from-[#4ADE80] via-[#22C55E] to-[#15803D] text-black shadow-lg shadow-green-500/20 border border-[#4ADE80]/30 active:scale-[0.95]' 
+                                  : 'bg-green-500/10 text-green-500/40 hover:bg-green-500/20'
+                                }
+                                before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+                                before:via-white/30 before:to-transparent before:translate-x-[-100%] 
+                                hover:before:translate-x-[100%] before:transition-transform before:duration-700`}
                             >
                               BUY
                             </button>
+
+                            {/* METALLIC RED SELL BUTTON */}
                             <button
                               onClick={() => setEditFormData({...editFormData, type: 'SELL'})}
-                              className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                                editFormData.type === 'SELL' 
-                                  ? 'bg-red-500/20 text-red-500 border border-red-500/30' 
-                                  : 'bg-red-500/10 text-red-500/50 hover:bg-red-500/15'
-                              }`}
+                              className={`px-4 py-1.5 rounded-full text-[12px] font-black transition-all relative overflow-hidden tracking-widest
+                                ${editFormData.type === 'SELL' 
+                                  ? 'bg-gradient-to-br from-[#F87171] via-[#EF4444] to-[#B91C1C] text-black shadow-lg shadow-red-500/20 border border-[#F87171]/30 active:scale-[0.95]' 
+                                  : 'bg-red-500/10 text-red-500/40 hover:bg-red-500/20'
+                                }
+                                before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+                                before:via-white/30 before:to-transparent before:translate-x-[-100%] 
+                                hover:before:translate-x-[100%] before:transition-transform before:duration-700`}
                             >
                               SELL
                             </button>
                           </div>
                         ) : (
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          <span className={`px-4 py-1.5 rounded-full text-[12px] font-black tracking-widest border shadow-sm ${
                             transaction.type === 'BUY' 
-                              ? 'bg-green-500/20 text-green-500' 
-                              : 'bg-red-500/20 text-red-500'
+                              ? 'bg-gradient-to-br from-[#4ADE80] via-[#22C55E] to-[#15803D] text-black border-[#4ADE80]/30 shadow-green-500/10' 
+                              : 'bg-gradient-to-br from-[#F87171] via-[#EF4444] to-[#B91C1C] text-black border-[#F87171]/30 shadow-red-500/10'
                           }`}>
                             {transaction.type}
-                          </span>
+                          </span> 
                         )}
                       </td>
                       
@@ -664,7 +673,13 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                             <div className="flex gap-2">
                               <button
                                 onClick={() => saveTransactionEdit(transaction.id)}
-                                className="px-3 py-1.5 bg-green-500/20 text-green-500 text-xs font-bold rounded-lg hover:bg-green-500/30 transition-all"
+                                className="relative overflow-hidden px-4 py-2 bg-gradient-to-br from-[#4ADE80] via-[#22C55E] to-[#15803D] 
+                                          text-black text-[10px] font-black uppercase tracking-widest rounded-lg transition-all 
+                                          hover:brightness-110 active:scale-[0.95] shadow-lg shadow-green-500/20 border border-[#4ADE80]/30
+                                          before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+                                          before:via-white/30 before:to-transparent before:translate-x-[-100%] 
+                                          hover:before:translate-x-[100%] before:transition-transform before:duration-700
+                                          after:absolute after:inset-0 after:bg-gradient-to-t after:from-white/10 after:via-transparent after:to-white/5"
                               >
                                 Save
                               </button>
@@ -679,12 +694,18 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                                     editCurrency: localCurrency
                                   });
                                 }}
-                                className="px-3 py-1.5 bg-zinc-500/20 text-zinc-500 text-xs font-bold rounded-lg hover:bg-zinc-500/30 transition-all"
+                                className="relative overflow-hidden px-3 py-2 bg-gradient-to-br from-[#2D3748] via-[#4A5568] to-[#1A202C] 
+                                          text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all 
+                                          hover:brightness-125 active:scale-[0.95] shadow-lg shadow-gray-900/50 border border-gray-700/50
+                                          before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+                                          before:via-white/20 before:to-transparent before:translate-x-[-100%] 
+                                          hover:before:translate-x-[100%] before:transition-transform before:duration-700
+                                          after:absolute after:inset-0 after:bg-gradient-to-t after:from-white/10 after:via-transparent after:to-white/5"
                               >
                                 Cancel
                               </button>
                             </div>
-                            <div className="text-[10px] text-zinc-500 mt-1">
+                            <div className="text-[12px] text-zinc-500 mt-1">
                               Editing in {editFormData.editCurrency}
                             </div>
                           </div>
@@ -693,18 +714,30 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                             <div className="flex gap-2">
                               <button
                                 onClick={() => startEditTransaction(transaction)}
-                                className="px-3 py-1.5 bg-blue-500/20 text-blue-500 text-xs font-bold rounded-lg hover:bg-blue-500/30 transition-all"
+                                className="relative overflow-hidden px-3 py-2 bg-gradient-to-br from-[#2D3748] via-[#4A5568] to-[#1A202C] 
+                                          text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all 
+                                          hover:brightness-125 active:scale-[0.95] shadow-lg shadow-gray-900/50 border border-gray-700/50
+                                          before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+                                          before:via-white/20 before:to-transparent before:translate-x-[-100%] 
+                                          hover:before:translate-x-[100%] before:transition-transform before:duration-700
+                                          after:absolute after:inset-0 after:bg-gradient-to-t after:from-white/10 after:via-transparent after:to-white/5"
                               >
                                 Edit
                               </button>
                               <button
                                 onClick={() => removeTransaction(transaction.id)}
-                                className="px-3 py-1.5 bg-red-500/20 text-red-500 text-xs font-bold rounded-lg hover:bg-red-500/30 transition-all"
+                                className="relative overflow-hidden px-3 py-2 bg-gradient-to-br from-[#7B341E] via-[#9C4221] to-[#652B19] 
+                                          text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all 
+                                          hover:brightness-125 active:scale-[0.95] shadow-lg shadow-red-900/50 border border-red-800/50
+                                          before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+                                          before:via-white/20 before:to-transparent before:translate-x-[-100%] 
+                                          hover:before:translate-x-[100%] before:transition-transform before:duration-700
+                                          after:absolute after:inset-0 after:bg-gradient-to-t after:from-white/10 after:via-transparent after:to-white/5"
                               >
                                 Remove
                               </button>
                             </div>
-                            <div className="text-[10px] text-zinc-500">
+                            <div className="text-[12px] text-zinc-500">
                               Click to edit
                             </div>
                           </div>

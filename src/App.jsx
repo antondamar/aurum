@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { auth, db } from './firebase'; 
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 // Komponen Pendukung
 import Navbar from './components/Navbar';
@@ -13,6 +13,7 @@ import AssetHistory from './components/AssetHistory';
 import Auth from './components/Auth'; 
 import Profile from './components/Profile';
 import ScrollToTop from './components/ScrollToTop';
+import ProfileUpdateAlert from './components/ProfileUpdateAlert';
 
 // Komponen Footer
 const Footer = () => {
@@ -41,6 +42,14 @@ function App() {
 
   const [profileData, setProfileData] = useState({ username: '', firstName: '', lastName: '' });
 
+  // Generate a unique ID for this tab
+  useEffect(() => {
+    if (!sessionStorage.getItem('tabId')) {
+      const tabId = 'tab-' + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem('tabId', tabId);
+    }
+  }, []);
+
   // 1. MONITOR STATUS LOGIN - WITH DEBUG LOGS
   useEffect(() => {
     console.log("App.jsx: useEffect for auth started");
@@ -55,18 +64,21 @@ function App() {
           const docSnap = await getDoc(docRef);
 
           if (docSnap.exists()) {
-            // Existing user: load their data
             const data = docSnap.data();
             console.log("User data loaded:", data);
+            
+            // ONLY set portfolios and assetMasterList here
+            // DO NOT overwrite profileData that might have been updated elsewhere
             setPortfolios(data.portfolios || []);
             setAssetMasterList(data.assetMasterList || []);
-            setProfileData({
-              username: data.username || '',
-              firstName: data.firstName || '',
-              lastName: data.lastName || ''
-            });
+            
+            // Only set profile data if it's not already set
+            setProfileData(prev => ({
+              username: prev.username || data.username || '',
+              firstName: prev.firstName || data.firstName || '',
+              lastName: prev.lastName || data.lastName || ''
+            }));
           } else {
-            // New user: initialize with empty data
             console.log("New user, creating empty data...");
             const initialData = {
               portfolios: [],
@@ -77,23 +89,23 @@ function App() {
             setPortfolios([]);
             setAssetMasterList([]);
           }
+          setCurrentView('Home');
           setIsDataLoaded(true);
         } catch (error) {
           console.error("Error loading user data:", error);
         }
       } else {
-        // User logged out
         console.log("User logged out, clearing data");
         setPortfolios([]);
         setAssetMasterList([]);
+        setProfileData({ username: '', firstName: '', lastName: '' });
+        setCurrentView('Home');
       }
       
       setUser(currentUser);
       setLoading(false);
       console.log("Loading set to false");
     });
-    // Check initial auth state immediately
-    console.log("Checking initial auth state...");
     
     return () => {
       console.log("App.jsx: cleanup auth listener");
@@ -111,10 +123,16 @@ function App() {
     });
   }, [loading, user, portfolios, assetMasterList]);
 
-  // --- CONSOLIDATED CLOUD SYNC ---
+  // --- CONSOLIDATED CLOUD SYNC (UPDATED) ---
   useEffect(() => {
     const syncData = async () => {
       if (user && isDataLoaded) { 
+        const currentTabId = sessionStorage.getItem('tabId');
+        const lastSource = localStorage.getItem('lastProfileUpdateSource');
+
+        // Only sync if this tab is the one that made the change
+        if (lastSource !== currentTabId && lastSource !== null) return;
+
         try {
           const docRef = doc(db, "users", user.uid);
           await setDoc(docRef, {
@@ -123,17 +141,19 @@ function App() {
             ...profileData,
             lastUpdated: new Date().toISOString()
           }, { merge: true });
-          console.log("✅ Cloud Sync Successful");
         } catch (error) {
-          console.error("❌ Cloud Sync Error:", error);
+          console.error("Cloud Sync Error:", error);
         }
       }
     };
 
-    // Debounce: Wait 1 second after changes stop before saving
-    const timeoutId = setTimeout(syncData, 1000);
-    return () => clearTimeout(timeoutId);
-
+    const hasChanges = portfolios.length > 0 || assetMasterList.length > 0 || 
+                      profileData.username || profileData.firstName || profileData.lastName;
+    
+    if (hasChanges) {
+      const timeoutId = setTimeout(syncData, 2000);
+      return () => clearTimeout(timeoutId);
+    }
   }, [portfolios, assetMasterList, profileData, user, isDataLoaded]);
 
   // Layar Loading Awal
@@ -172,6 +192,46 @@ function App() {
     updateRates();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const userDocRef = doc(db, "users", user.uid);
+    
+    // Listen ONLY for profile changes
+    const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const freshData = docSnapshot.data();
+        
+        // Only update if there are actual differences in profile data
+        if (freshData.username !== profileData.username || 
+            freshData.firstName !== profileData.firstName || 
+            freshData.lastName !== profileData.lastName) {
+          
+          console.log("📱 Profile updated from another tab/window");
+          
+          // Update profile data from Firestore
+          setProfileData({
+            username: freshData.username || '',
+            firstName: freshData.firstName || '',
+            lastName: freshData.lastName || ''
+          });
+          
+          // Show a notification to the user
+          if (typeof window !== 'undefined' && 'Notification' in window) {
+            if (Notification.permission === 'granted') {
+              new Notification('Profile Updated', {
+                body: 'Your profile was updated in another tab/window.',
+                icon: '/favicon.ico'
+              });
+            }
+          }
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
   // Layar Loading Awal - UPDATED
   if (loading && !initialLoadTimeout) {
     return (
@@ -201,6 +261,7 @@ function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <ProfileUpdateAlert />
       <div className="min-h-screen text-white font-sans relative overflow-x-hidden">
         <LiquidBackground />
         
@@ -214,6 +275,9 @@ function App() {
           </main>
         ) : (
           <>
+          {currentView === 'Home' && window.location.pathname !== '/' && (
+            <Navigate to="/" replace={true} />
+          )}
           <Navbar setView={setCurrentView} currentView={currentView} profileData={profileData} />
 
             <main className="max-w-6xl mx-auto px-6 pb-0 relative z-10">

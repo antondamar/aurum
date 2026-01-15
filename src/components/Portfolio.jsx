@@ -820,7 +820,13 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         <button
           onClick={updateAllPrices}
           disabled={isUpdatingPrices || activePortfolio.assets.length === 0}
-          className="bg-[#D3AC2C]/20 text-[#D3AC2C] text-xs font-bold px-4 py-2 rounded-lg hover:bg-[#D3AC2C]/30 transition-all disabled:opacity-50 flex items-center gap-2"
+          className="relative overflow-hidden bg-gradient-to-br from-[#F9E08B] via-[#D3AC2C] to-[#A57A03] 
+             text-black text-xs font-bold px-4 py-2 rounded-lg transition-all 
+             disabled:opacity-50 flex items-center gap-2 hover:brightness-110 
+             active:scale-[0.98] shadow-lg shadow-[#D3AC2C]/20 border border-[#F9E08B]/30
+             before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+             before:via-white/20 before:to-transparent before:translate-x-[-100%] 
+             hover:before:translate-x-[100%] before:transition-transform before:duration-700"
         >
           {isUpdatingPrices ? (
             <>
@@ -1266,18 +1272,35 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
           
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-bold text-zinc-500 tracking-widest uppercase">Transaction Type</label>
-            <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+            <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800 gap-1">
+              {/* METALLIC GREEN BUY BUTTON */}
               <button
                 type="button"
                 onClick={() => setNewAsset({...newAsset, type: 'BUY'})}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${newAsset.type === 'BUY' ? 'bg-green-500/20 text-green-500' : 'text-zinc-500'}`}
+                className={`flex-1 py-3 rounded-lg text-xs font-black transition-all relative overflow-hidden tracking-widest
+                  ${newAsset.type === 'BUY' 
+                    ? 'bg-gradient-to-br from-[#4ADE80] via-[#22C55E] to-[#15803D] text-black shadow-lg shadow-green-500/20 border border-[#4ADE80]/30 active:scale-[0.95]' 
+                    : 'bg-green-500/10 text-green-500/40 hover:bg-green-500/20'
+                  }
+                  before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+                  before:via-white/20 before:to-transparent before:translate-x-[-100%] 
+                  hover:before:translate-x-[100%] before:transition-transform before:duration-700`}
               >
                 BUY
               </button>
+
+              {/* METALLIC RED SELL BUTTON */}
               <button
                 type="button"
                 onClick={() => setNewAsset({...newAsset, type: 'SELL'})}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${newAsset.type === 'SELL' ? 'bg-red-500/20 text-red-500' : 'text-zinc-500'}`}
+                className={`flex-1 py-3 rounded-lg text-xs font-black transition-all relative overflow-hidden tracking-widest
+                  ${newAsset.type === 'SELL' 
+                    ? 'bg-gradient-to-br from-[#F87171] via-[#EF4444] to-[#B91C1C] text-black shadow-lg shadow-red-500/20 border border-[#F87171]/30 active:scale-[0.95]' 
+                    : 'bg-red-500/10 text-red-500/40 hover:bg-red-500/20'
+                  }
+                  before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
+                  before:via-white/20 before:to-transparent before:translate-x-[-100%] 
+                  hover:before:translate-x-[100%] before:transition-transform before:duration-700`}
               >
                 SELL
               </button>

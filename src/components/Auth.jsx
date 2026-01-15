@@ -6,6 +6,7 @@ import {
   sendPasswordResetEmail 
 } from 'firebase/auth';
 import { doc, setDoc, getDocs, collection, query, where } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
@@ -20,14 +21,15 @@ const Auth = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const navigate = useNavigate();
 
   // Fungsi untuk mencari user berdasarkan username
-  const findUserByUsername = async (username) => {
+  const findUserByUsername = async (username, retryCount = 0) => {
     try {
+      const lowercaseUsername = username.trim().toLowerCase();
       const usersRef = collection(db, "users");
-      // Convert input to lowercase to match the standardized format
-      const q1 = query(usersRef, where("username", "==", username.trim().toLowerCase()));
-      const querySnapshot = await getDocs(q1);
+      const q = query(usersRef, where("username", "==", lowercaseUsername));
+      const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
         const userDoc = querySnapshot.docs[0];
@@ -37,6 +39,13 @@ const Auth = () => {
           username: userDoc.data().username
         };
       }
+      
+      // If not found, retry once (for eventual consistency)
+      if (retryCount < 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return findUserByUsername(username, retryCount + 1);
+      }
+      
       return null;
     } catch (error) {
       console.error("Error finding user:", error);
@@ -167,15 +176,17 @@ const Auth = () => {
         }
         
         await signInWithEmailAndPassword(auth, loginEmail, password);
+        navigate('/');
       }
     } catch (error) {
-      // Handle registration errors
       if (error.code === 'auth/user-not-found') {
-        setError(isUsernameLogin ? 'Username not found' : 'Email not found');
+        setError('Username/email not found. If you recently changed your username, try again in 30 seconds or use your email.');
       } else if (error.code === 'auth/wrong-password') {
         setError('Incorrect password');
       } else if (error.code === 'auth/invalid-email') {
         setError('Invalid email format');
+      } else if (error.code === 'auth/too-many-requests') {
+        setError('Too many failed attempts. Please try again later.');
       } else {
         setError(error.message);
       }

@@ -6,7 +6,7 @@ import { signOut } from 'firebase/auth';
 
 export default function Navbar({ setView, currentView, profileData }) {
   const navigate = useNavigate(); // ✅ Buat navigate function
-  const navItems = ["Home", "Portfolio", "Insights", "Tools", "Settings"];
+  const navItems = ["Home", "Portfolio", "Insights", "Tools"];
   const userInitial = profileData?.username?.[0]?.toUpperCase() || 
                      auth.currentUser?.email?.[0]?.toUpperCase() || 
                      "U";
@@ -115,6 +115,7 @@ export default function Navbar({ setView, currentView, profileData }) {
             <button
               onClick={() => {
                 setView('Profile');
+                navigate('/profile');
                 setShowDropdown(false);
               }}
               className="w-full text-left px-4 py-3 text-sm hover:bg-white/5 transition-colors"
