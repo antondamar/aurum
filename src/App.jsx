@@ -14,6 +14,9 @@ import Auth from './components/Auth';
 import Profile from './components/Profile';
 import ScrollToTop from './components/ScrollToTop';
 import ProfileUpdateAlert from './components/ProfileUpdateAlert';
+import ToolsGrid from './components/tools/ToolsGrid';
+import GoalPriceTool from './components/tools/GoalPriceTool'
+import AllocationPlanner from './components/tools/AllocationPlanner'
 
 // Komponen Footer
 const Footer = () => {
@@ -324,6 +327,31 @@ function App() {
                   />
                 ) : currentView === 'Profile' ? (
                     <Profile profileData={profileData} setProfileData={setProfileData} />
+                ) : currentView === 'Tools' ? (
+                    <ToolsGrid setView={setCurrentView} />
+                ) : currentView.startsWith('Tool_') ? (
+                    <div className="animate-in slide-in-from-right duration-300">
+                      <button
+                        onClick={() => setCurrentView('Tools')}
+                        className="group flex mt-10 mb-10 items-center gap-2 text-zinc-500 hover:text-[#D3AC2C] transition-all cursor-pointer"
+                      >
+                        <div className="p-2 rounded-full bg-white/5 group-hover:bg-[#D3AC2C]/10 transition-colors">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                          </svg>
+                        </div>
+                        <span className="font-bold uppercase tracking-widest text-xs">Back to Workshop</span>
+                      </button>
+                      
+                      {/* Conditional Tool Components */}
+                        {currentView === 'Tool_goal' && <GoalPriceTool 
+                          portfolios={portfolios} 
+                          rates={rates} 
+                          currency={currency} 
+                          setView={setCurrentView} 
+                        />}
+                        {currentView === 'Tool_rebalance' && <AllocationPlanner portfolios={portfolios} rates={rates} currency={currency} setView={setCurrentView} />}
+                      </div>
                 ) : (
                   /* Tampilan Soon untuk Insights, Tools, dan Settings */
                   <div className="h-[60vh] flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">

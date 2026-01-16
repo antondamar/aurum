@@ -77,9 +77,7 @@ export default function Navbar({ setView, currentView, profileData }) {
             key={item}
             onClick={() => {
               setView(item);
-              if (item === 'Home') {
-                navigate('/'); // ✅ Navigasi ke homepage jika Home diklik
-              }
+              navigate('/'); 
             }}
             className={`text-[13px] font-medium transition-colors duration-200 ${
               currentView === item ? 'text-white' : 'text-zinc-500 hover:text-white'
