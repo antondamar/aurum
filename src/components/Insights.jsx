@@ -20,24 +20,41 @@ const Insights = ({ rates, currency }) => {
     if (paramSymbol) setSelectedSymbol(paramSymbol);
   }, [paramSymbol]);
 
-  const handleStartAnalysis = async () => {
-    setLoading(true);
-    setError(null);
-    setResult(null);
+// Inside Insights.jsx
+const handleStartAnalysis = async () => {
+  setLoading(true);
+  setError(null);
+  setResult(null);
 
-    // Standardizing the symbol for the backend (e.g., Apple -> AAPL)
-    const assetInfo = ASSET_LIBRARY.find(a => a.name === selectedSymbol || a.symbol === selectedSymbol);
-    const apiSymbol = assetInfo?.symbol || selectedSymbol;
+  const assetInfo = ASSET_LIBRARY.find(a => a.name === selectedSymbol || a.symbol === selectedSymbol);
+  let apiSymbol = assetInfo?.symbol || selectedSymbol;
 
-    const data = await fetchAIInsights(apiSymbol, timeframe, interval);
-    
-    if (data && !data.error) {
-      setResult(data);
-    } else {
-      setError(data?.error || "Failed to generate AI analysis. Please try again.");
-    }
-    setLoading(false);
-  };
+  // FIX: Format symbol for Yahoo Finance before sending to backend
+  if (['BTC', 'ETH', 'SOL', 'BNB'].includes(apiSymbol)) {
+    apiSymbol = `${apiSymbol}-USD`;
+  } else if (!apiSymbol.includes('.') && assetInfo?.type === 'stock') {
+    // Optional: Add .JK for Indo stocks if not present
+    apiSymbol = `${apiSymbol}.JK`;
+  }
+
+  // FIX: Pass the 'interval' state as the third argument
+  const data = await fetchAIInsights(apiSymbol, timeframe, interval);
+  
+  if (data && !data.error) {
+    setResult(data);
+  } else {
+    setError(data?.error || "Failed to generate AI analysis. Please check your backend logs.");
+  }
+  setLoading(false);
+};
+
+    const timeframeMap = {
+        '1wk': '1wk',
+        '1mo': '1mo',
+        '3mo': '3mo',
+        '1y': '1y',
+        '5y': '5y'
+    };
 
   return (
     <div className="pt-24 px-8 max-w-5xl mx-auto pb-32">
@@ -69,15 +86,15 @@ const Insights = ({ rates, currency }) => {
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Timeframe</label>
             <select 
-              className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-[#D3AC2C]"
-              value={timeframe}
-              onChange={(e) => setTimeframe(e.target.value)}
-            >
-              <option value="1wk">1 Week</option>
-              <option value="1mo">1 Month</option>
-              <option value="3mo">3 Months</option>
-              <option value="1y">1 Year</option>
-              <option value="5y">Max (5 Years)</option>
+                className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-[#D3AC2C]"
+                value={timeframe}
+                onChange={(e) => setTimeframe(e.target.value)}
+                >
+                <option value="1wk">1 Week</option>
+                <option value="1mo">1 Month</option>
+                <option value="3mo">3 Months</option>
+                <option value="1y">1 Year</option>
+                <option value="5y">Max (5 Years)</option>
             </select>
           </div>
 

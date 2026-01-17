@@ -105,13 +105,26 @@ export const fetchExchangeRates = async () => {
   }
 };
 
-export const fetchAIInsights = async (symbol) => {
+
+export const fetchAIInsights = async (symbol, timeframe = '1mo', interval = '1d') => {
   try {
-    const response = await fetch(`${BACKEND_URL}/get-ai-insight?symbol=${symbol}`);
-    if (!response.ok) throw new Error('AI Insight failed');
+    // Construct URL with explicit params to ensure they are never undefined
+    const queryParams = new URLSearchParams({
+      symbol: symbol,
+      timeframe: timeframe,
+      interval: interval
+    }).toString();
+
+    const response = await fetch(`${BACKEND_URL}/get-ai-insight?${queryParams}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Server Error (${response.status}): ${errorText}`);
+    }
+    
     return await response.json();
   } catch (error) {
-    console.error("Error fetching AI insights:", error);
-    return null;
+    console.error("AI Insight Service Error:", error);
+    return { error: error.message };
   }
 };
