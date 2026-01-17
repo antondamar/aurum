@@ -9,7 +9,8 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
     portfolioCount: 0,
     portfolioHoldings: {
       crypto: [],
-      stocks: []
+      stocks: [],
+      cash: []
     },
     totalCostBasis: 0,
     // New aggregated data fields
@@ -22,11 +23,13 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
       assetTypeBreakdown: {
         crypto: { count: 0, value: 0, percentage: 0 },
         stocks: { count: 0, value: 0, percentage: 0 },
+        cash: { count: 0, value: 0, percentage: 0 },
         other: { count: 0, value: 0, percentage: 0 }
       },
       performanceByType: {
         crypto: { totalReturn: 0, avgReturn: 0 },
-        stocks: { totalReturn: 0, avgReturn: 0 }
+        stocks: { totalReturn: 0, avgReturn: 0 },
+        cash: { totalReturn: 0, avgReturn: 0 }
       },
       monthlyChange: 0,
       dailyChange: 0
@@ -69,6 +72,7 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
       let assetTypeValues = {
         crypto: { totalValue: 0, totalCost: 0, assets: [] },
         stocks: { totalValue: 0, totalCost: 0, assets: [] },
+        cash: { totalValue: 0, totalCost: 0, assets: [] },
         other: { totalValue: 0, totalCost: 0, assets: [] }
       };
 
@@ -193,6 +197,9 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
 
   // Calculate aggregated statistics
   const calculateAggregatedStats = (allAssets, groupedHoldings, totalNetWorth, totalCostBasis, assetTypeValues, portfolioDistribution) => {
+    const emptyAssetStats = { count: 0, value: 0, percentage: 0 };
+    const emptyPerfStats = { totalReturn: 0, avgReturn: 0 };
+    
     if (allAssets.length === 0) {
       return {
         bestPerformingAsset: null,
@@ -200,17 +207,18 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
         largestHolding: null,
         smallestHolding: null,
         portfolioDistribution: {},
-        assetTypeBreakdown: {
-          crypto: { count: 0, value: 0, percentage: 0 },
-          stocks: { count: 0, value: 0, percentage: 0 },
-          other: { count: 0, value: 0, percentage: 0 }
+        assetTypeBreakdown: { 
+          crypto: emptyAssetStats, 
+          stocks: emptyAssetStats, 
+          cash: emptyAssetStats, 
+          other: emptyAssetStats 
         },
-        performanceByType: {
-          crypto: { totalReturn: 0, avgReturn: 0 },
-          stocks: { totalReturn: 0, avgReturn: 0 }
+        performanceByType: { 
+          crypto: emptyPerfStats, 
+          stocks: emptyPerfStats, 
+          cash: emptyPerfStats 
         },
-        monthlyChange: 0,
-        dailyChange: 0
+        monthlyChange: 0, dailyChange: 0
       };
     }
 
@@ -257,31 +265,31 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
         value: assetTypeValues.stocks.totalValue,
         percentage: totalNetWorth > 0 ? (assetTypeValues.stocks.totalValue / totalNetWorth) * 100 : 0
       },
+      cash: {
+        count: groupedHoldings.cash.length,
+        value: assetTypeValues.cash.totalValue,
+        percentage: totalNetWorth > 0 ? (assetTypeValues.cash.totalValue / totalNetWorth) * 100 : 0
+      },
       other: {
-        count: allAssets.filter(a => !['crypto', 'stocks'].includes(a.type)).length,
+        count: allAssets.filter(a => !['crypto', 'stocks', 'cash'].includes(a.type)).length,
         value: assetTypeValues.other.totalValue,
         percentage: totalNetWorth > 0 ? (assetTypeValues.other.totalValue / totalNetWorth) * 100 : 0
       }
     };
 
-    // Calculate performance by type
+    const calculateTypePerformance = (typeData) => ({
+      totalReturn: typeData.totalCost > 0 
+        ? ((typeData.totalValue - typeData.totalCost) / typeData.totalCost) * 100 
+        : 0,
+      avgReturn: typeData.assets.length > 0 
+        ? typeData.assets.reduce((sum, a) => sum + parseFloat(a.change), 0) / typeData.assets.length 
+        : 0
+    });
+
     const performanceByType = {
-      crypto: {
-        totalReturn: assetTypeValues.crypto.totalCost > 0 
-          ? ((assetTypeValues.crypto.totalValue - assetTypeValues.crypto.totalCost) / assetTypeValues.crypto.totalCost) * 100 
-          : 0,
-        avgReturn: assetTypeValues.crypto.assets.length > 0 
-          ? assetTypeValues.crypto.assets.reduce((sum, a) => sum + parseFloat(a.change), 0) / assetTypeValues.crypto.assets.length 
-          : 0
-      },
-      stocks: {
-        totalReturn: assetTypeValues.stocks.totalCost > 0 
-          ? ((assetTypeValues.stocks.totalValue - assetTypeValues.stocks.totalCost) / assetTypeValues.stocks.totalCost) * 100 
-          : 0,
-        avgReturn: assetTypeValues.stocks.assets.length > 0 
-          ? assetTypeValues.stocks.assets.reduce((sum, a) => sum + parseFloat(a.change), 0) / assetTypeValues.stocks.assets.length 
-          : 0
-      }
+      crypto: calculateTypePerformance(assetTypeValues.crypto),
+      stocks: calculateTypePerformance(assetTypeValues.stocks),
+      cash: calculateTypePerformance(assetTypeValues.cash)
     };
 
     // Calculate monthly and daily change (mock data - you'd integrate with real historical data)
@@ -307,8 +315,11 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
     const lowerName = assetName.toLowerCase();
     const cryptoKeywords = ['bitcoin', 'ethereum', '(btc)', '(eth)', 'crypto', 'solana', 'usdt', 'xrp', 'cardano', 'dogecoin'];
     const stockKeywords = ['inc', 'corp', 'ltd', 'plc', 'co', 'group', 'holdings'];
+    // Added currency keywords for IDR, USD, CAD, CHF, CNY, JPY, SGD
+    const cashKeywords = ['rupiah', 'dollar', 'franc', 'yuan', 'yen', 'sgd', 'idr', 'usd', 'cad', 'chf', 'cny', 'jpy'];
     
     if (cryptoKeywords.some(keyword => lowerName.includes(keyword))) return 'crypto';
+    if (cashKeywords.some(keyword => lowerName.includes(keyword))) return 'cash'; // Add this check
     if (stockKeywords.some(keyword => lowerName.includes(keyword)) || /^[A-Z]{1,5}$/.test(assetName)) return 'stocks';
     return 'other';
   };
@@ -329,7 +340,8 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
   const groupAssetsByType = (assets) => {
     const grouped = {
       crypto: [],
-      stocks: []
+      stocks: [],
+      cash: [] // Add this
     };
 
     assets.forEach(asset => {
@@ -337,6 +349,8 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
         grouped.crypto.push(asset);
       } else if (asset.type === 'stocks') {
         grouped.stocks.push(asset);
+      } else if (asset.type === 'cash') {
+        grouped.cash.push(asset);
       }
     });
 
@@ -500,7 +514,8 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
                   style={{ width: `${dashboardData.aggregatedStats.assetTypeBreakdown.crypto.percentage}%` }}
                 />
               </div>
-            </div>
+            </div>  
+
             <div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-300">Stocks</span>
@@ -515,12 +530,27 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
                 />
               </div>
             </div>
+
+            <div>
+              <div className="flex justify-between text-sm">
+                <span className="text-zinc-300">Forex</span>
+                <span className="gold-text">
+                  {dashboardData.aggregatedStats.assetTypeBreakdown.cash.percentage.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-2 bg-zinc-800 rounded-full overflow-hidden mt-1">
+                <div  
+                  className="h-full bg-[#40916C]" 
+                  style={{ width: `${dashboardData.aggregatedStats.assetTypeBreakdown.cash.percentage}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Performance by Asset Type */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         <div className="aurum-card p-6 rounded-2xl">
           <h3 className="font-bold text-lg mb-4">Crypto Performance</h3>
           <div className="space-y-4">
@@ -580,6 +610,38 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
               <span className="text-zinc-400">Total Value</span>
               <span className="text-lg font-bold gold-text">
                 {formatValue(dashboardData.aggregatedStats.assetTypeBreakdown.stocks.value, currency)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="aurum-card p-6 rounded-2xl">
+          <h3 className="font-bold text-lg mb-4">Forex Performance</h3>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-zinc-400">Total Return</span>
+              <span className={`text-lg font-bold ${
+                dashboardData.aggregatedStats.performanceByType.cash.totalReturn >= 0 
+                  ? 'text-emerald-400' 
+                  : 'text-red-400'
+              }`}>
+                {formatPercentage(dashboardData.aggregatedStats.performanceByType.cash.totalReturn)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-zinc-400">Average Asset Return</span>
+              <span className={`text-lg font-bold ${
+                dashboardData.aggregatedStats.performanceByType.cash.avgReturn >= 0 
+                  ? 'text-emerald-400' 
+                  : 'text-red-400'
+              }`}>
+                {formatPercentage(dashboardData.aggregatedStats.performanceByType.cash.avgReturn)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-zinc-400">Total Value</span>
+              <span className="text-lg font-bold gold-text">
+                {formatValue(dashboardData.aggregatedStats.assetTypeBreakdown.cash.value, currency)}
               </span>
             </div>
           </div>
@@ -682,6 +744,51 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
           </div>
         )}
 
+        {/* Forex Assets Section inside Portfolio Holdings (around line 555) */}
+        {dashboardData.portfolioHoldings.cash && dashboardData.portfolioHoldings.cash.length > 0 && (
+          <div className="mb-6">
+            <div className="p-4 bg-zinc-900/50 border-b border-zinc-800">
+              <h4 className="font-bold gold-text text-sm uppercase tracking-wider">
+                Forex & Cash ({dashboardData.portfolioHoldings.cash.length})
+              </h4>
+            </div>
+            <table className="w-full text-left">
+              <thead className="bg-white/5 text-zinc-400 text-xs uppercase">
+                <tr>
+                  <th className="p-4">Asset</th>
+                  <th className="p-4">Allocation</th>
+                  <th className="p-4">Value</th>
+                  <th className="p-4">Change</th>
+                  <th className="p-4">Portfolio</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {dashboardData.portfolioHoldings.cash.map((asset, index) => (
+                  <tr key={`cash-${index}`} className="hover:bg-white/5 transition-colors">
+                    <td className="p-4 font-semibold">
+                      <div className="flex items-center gap-3">
+                        {asset.color && (
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: asset.color }}
+                          />
+                        )}
+                        {asset.name}
+                      </div>
+                    </td>
+                    <td className="p-4">{asset.allocation}%</td>
+                    <td className="p-4">{formatValue(asset.value, currency)}</td>
+                    <td className={`p-4 ${parseFloat(asset.change) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {parseFloat(asset.change) >= 0 ? '+' : ''}{asset.change}%
+                    </td>
+                    <td className="p-4 text-zinc-400 text-sm">{asset.portfolio}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* Empty State */}
         {dashboardData.portfolioHoldings.crypto?.length === 0 && 
          dashboardData.portfolioHoldings.stocks?.length === 0 && (
@@ -716,6 +823,12 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
                     }}
                   />
                   <div 
+                    className="h-full bg-[#40916C] float-left" 
+                    style={{ 
+                      width: `${dashboardData.aggregatedStats.assetTypeBreakdown.cash.percentage}%` 
+                    }}
+                  />
+                  <div 
                     className="h-full bg-[#6B7280] float-left" 
                     style={{ 
                       width: `${dashboardData.aggregatedStats.assetTypeBreakdown.other.percentage}%` 
@@ -725,7 +838,7 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
               )}
             </div>
             <span className="text-xs text-zinc-400">
-              {dashboardData.portfolioHoldings?.crypto?.length || 0} crypto, {dashboardData.portfolioHoldings?.stocks?.length || 0} stocks
+              {dashboardData.portfolioHoldings?.crypto?.length || 0} crypto, {dashboardData.portfolioHoldings?.stocks?.length || 0} stocks, {dashboardData.portfolioHoldings?.cash?.length || 0} cash
             </span>
           </div>
         </div>

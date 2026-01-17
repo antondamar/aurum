@@ -17,6 +17,7 @@ import ProfileUpdateAlert from './components/ProfileUpdateAlert';
 import ToolsGrid from './components/tools/ToolsGrid';
 import GoalPriceTool from './components/tools/GoalPriceTool'
 import AllocationPlanner from './components/tools/AllocationPlanner'
+import Insights from './components/Insights';
 
 // Komponen Footer
 const Footer = () => {
@@ -44,6 +45,20 @@ function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   const [profileData, setProfileData] = useState({ username: '', firstName: '', lastName: '' });
+
+  useEffect(() => {
+  const fetchInitialRates = async () => {
+    try {
+      const response = await fetch('https://open.er-api.com/v6/latest/USD');
+      const data = await response.json();
+      setRates(data.rates || {});
+    } catch (error) {
+      console.error('Failed to fetch exchange rates:', error);
+    }
+  };
+  
+  fetchInitialRates();
+}, []);
 
   // Add a useEffect to save the view whenever it changes
   useEffect(() => {
@@ -193,6 +208,7 @@ function App() {
     
     return () => clearTimeout(timeout);
   }, [loading]);
+  
 
   const [currency, setCurrency] = useState('USD');
   const [rates, setRates] = useState({ USD: 1, CAD: 1.35, IDR: 15600 });
@@ -352,6 +368,11 @@ function App() {
                         />}
                         {currentView === 'Tool_rebalance' && <AllocationPlanner portfolios={portfolios} rates={rates} currency={currency} setView={setCurrentView} />}
                       </div>
+                ) : currentView === 'Insights' ? (
+                    <Insights 
+                      rates={rates} 
+                      currency={currency} 
+                    />
                 ) : (
                   /* Tampilan Soon untuk Insights, Tools, dan Settings */
                   <div className="h-[60vh] flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
@@ -388,7 +409,15 @@ function App() {
                     />
                   } 
                 />
-
+                <Route 
+                  path="/insights/:symbol" 
+                  element={
+                    <Insights 
+                      rates={rates} 
+                      currency={currency} 
+                    />
+                  } 
+                />
                 {/* Fallback jika route tidak ditemukan */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

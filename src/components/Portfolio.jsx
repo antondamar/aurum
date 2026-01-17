@@ -45,7 +45,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         countInDashboard: true
       };
       setPortfolios([defaultPortfolio]);
-      setActivePortfolioId(defaultPortfolio.id);
+      setActivePortfolioId(defaultPortfolio.id);  
     }
   };
 
@@ -86,27 +86,61 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
 
   // Get asset info from library
   const getAssetInfo = (assetName, assetSymbol) => {
-    // Prioritas 1: Gunakan symbol jika tersedia
-    if (assetSymbol) return ASSET_LIBRARY.find(a => a.symbol === assetSymbol);
+    console.log(`🔍 Looking up asset: "${assetName}", symbol: "${assetSymbol}"`);
     
-    // Prioritas 2: Cari berdasarkan symbol dalam kurung
+    // Priority 1: Use symbol if available
+    if (assetSymbol) {
+      const bySymbol = ASSET_LIBRARY.find(a => a.symbol === assetSymbol);
+      if (bySymbol) {
+        console.log(`✅ Found by symbol: ${bySymbol.name}`);
+        return bySymbol;
+      }
+    }
+    
+    // Priority 2: Try to extract symbol from name
     const symbolMatch = assetName.match(/\(([^)]+)\)/);
     if (symbolMatch) {
       const extractedSymbol = symbolMatch[1];
-      const asset = ASSET_LIBRARY.find(a => a.symbol === extractedSymbol);
-      if (asset) return asset;
+      const assetBySymbol = ASSET_LIBRARY.find(a => a.symbol === extractedSymbol);
+      if (assetBySymbol) {
+        console.log(`✅ Found by extracted symbol: ${assetBySymbol.name}`);
+        return assetBySymbol;
+      }
     }
     
-    // Prioritas 3: Cari berdasarkan nama (tanpa kurung)
+    // Priority 3: Clean name (remove parentheses and trim)
     const cleanName = assetName.replace(/\s*\([^)]*\)$/, '').trim();
-    const assetByName = ASSET_LIBRARY.find(a => a.name === cleanName);
-    if (assetByName) return assetByName;
+    console.log(`🔍 Trying clean name: "${cleanName}"`);
     
-    // Prioritas 4: Cari parsial match
-    return ASSET_LIBRARY.find(a => 
-      assetName.includes(a.name) || 
-      assetName.includes(a.symbol)
+    // Try exact match first
+    const exactMatch = ASSET_LIBRARY.find(a => a.name === cleanName);
+    if (exactMatch) {
+      console.log(`✅ Exact match found: ${exactMatch.name}`);
+      return exactMatch;
+    }
+    
+    // Priority 4: Case-insensitive partial match
+    const lowerCleanName = cleanName.toLowerCase();
+    const partialMatch = ASSET_LIBRARY.find(a => 
+      a.name.toLowerCase().includes(lowerCleanName) ||
+      lowerCleanName.includes(a.name.toLowerCase())
     );
+    
+    if (partialMatch) {
+      console.log(`✅ Partial match found: ${partialMatch.name}`);
+      return partialMatch;
+    }
+    
+    console.log(`❌ No match found for: "${assetName}"`);
+    
+    // Return a default object for unknown assets
+    return {
+      name: cleanName,
+      symbol: symbolMatch ? symbolMatch[1] : '',
+      type: 'custom',
+      category: 'Custom Asset',
+      description: 'Custom asset not in library'
+    };
   };
 
   const removeAsset = (assetId) => {
@@ -131,19 +165,33 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
     if (activePortfolio.assets.length === 0) return;
     
     console.log('🔄 Starting price update...');
-    console.log('Active portfolio assets:', activePortfolio.assets);
     setIsUpdatingPrices(true);
     try {
-      // Get all crypto assets with coingeckoId
+      // Fetch fresh exchange rates EVERY TIME
+      let freshRates = {};
+      try {
+        const ratesResponse = await fetch('https://open.er-api.com/v6/latest/USD');
+        const ratesData = await ratesResponse.json();
+        freshRates = ratesData.rates || {};
+        console.log('💱 Fresh exchange rates fetched:', freshRates);
+      } catch (rateError) {
+        console.error('Error fetching exchange rates:', rateError);
+        freshRates = rates; // Fall back to existing rates
+      }
+
       const cryptoAssets = activePortfolio.assets.filter(asset => {
         const info = getAssetInfo(asset.name, asset.symbol);
         return info && info.type === 'crypto' && info.coingeckoId;
       });
 
-      // Get all stock assets
       const stockAssets = activePortfolio.assets.filter(asset => {
         const info = getAssetInfo(asset.name);
         return info && info.type === 'stock';
+      });
+
+      const cashAssets = activePortfolio.assets.filter(asset => {
+        const info = getAssetInfo(asset.name);
+        return info && info.type === 'cash';
       });
 
       const newPrices = { ...realTimePrices };
@@ -164,70 +212,80 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         });
       }
 
-      // 2. Update Stocks (BARU - untuk semua saham)
+      // 2. Update Stocks - PASS FRESH RATES
       if (stockAssets.length > 0) {
         const stockPricePromises = stockAssets.map(async (asset) => {
           const info = getAssetInfo(asset.name);
           
-          // ✅ VALIDASI DITAMBAHKAN DI SINI
           if (!info?.symbol) {
             console.error(`❌ Symbol not found for asset: ${asset.name}`);
-            console.log('Asset object:', asset);
-            console.log('Available symbols in library:', ASSET_LIBRARY.map(a => a.symbol));
             return null;
-          }
-          
-          // Validasi khusus untuk saham IDX
-          if (info.type === 'stock' && info.exchange === 'IDX' && !info.symbol.includes('.JK')) {
-            console.warn(`⚠️ IDX stock "${info.name}" symbol "${info.symbol}" missing .JK suffix`);
-            // Tambahkan suffix otomatis jika diperlukan
-            const correctedSymbol = `${info.symbol}.JK`;
-            console.log(`Trying with corrected symbol: ${correctedSymbol}`);
           }
           
           try {
             console.log(`📊 Fetching stock price for ${asset.name} (${info.symbol})...`);
             
-            const price = await fetchStockPrice(info.symbol, rates?.IDR || 15600);
+            // Use fresh IDR rate if available, otherwise fallback
+            const idrRate = freshRates?.IDR || rates?.IDR || 15600;
+            const price = await fetchStockPrice(info.symbol, idrRate);
             
             console.log(`💰 Got price in USD for ${asset.name}: ${price}`);
             
             if (price > 0) {
               return { assetName: asset.name, price };
             } else {
-              console.warn(`⚠️ Zero price returned for ${asset.name}`);
-              // Fallback ke harga yang ada
               const fallbackPrice = asset.value / asset.amount;
               console.log(`Using fallback price: ${fallbackPrice}`);
               return { assetName: asset.name, price: fallbackPrice };
             }
           } catch (error) {
             console.error(`❌ Error fetching price for ${asset.name}:`, error);
-            // Fallback ke harga yang ada saat error
             const fallbackPrice = asset.value / asset.amount;
-            console.log(`Using fallback price due to error: ${fallbackPrice}`);
             return { assetName: asset.name, price: fallbackPrice };
           }
         });
 
         const stockPrices = await Promise.all(stockPricePromises);
         
-        // Log hasil untuk debugging
-        console.log('📋 Stock price results:', stockPrices.filter(r => r !== null));
-        
-        // Update newPrices dengan harga saham
         stockPrices.forEach(result => {
           if (result && result.price > 0) {
-            console.log(`✅ Setting price for ${result.assetName}: ${result.price}`);
             newPrices[result.assetName] = result.price;
           }
         });
       }
 
-      // Update state dengan harga baru
+      // 3. Update Cash/Forex Currencies - USING FRESH RATES
+      if (cashAssets.length > 0) {
+        cashAssets.forEach(asset => {
+          const info = getAssetInfo(asset.name);
+          const currencySymbol = info?.symbol || 
+                                (asset.name.match(/\(([^)]+)\)/) || [])[1];
+          
+          console.log(`💱 Processing forex: ${asset.name}, symbol: ${currencySymbol}`);
+          console.log(`💱 Fresh rates available:`, Object.keys(freshRates));
+          
+          if (currencySymbol && freshRates[currencySymbol]) {
+            // For forex: 1 unit of foreign currency in USD = 1 / exchange rate
+            // Example: 1 IDR in USD = 1 / 15600 = 0.000064 USD
+            const exchangeRate = freshRates[currencySymbol];
+            newPrices[asset.name] = 1 / exchangeRate;
+            console.log(`✅ Set price for ${asset.name}: 1 ${currencySymbol} = ${1/exchangeRate} USD`);
+          } else if (currencySymbol === 'USD') {
+            newPrices[asset.name] = 1; // 1 USD = 1 USD
+            console.log(`✅ Set price for USD: 1 USD = 1 USD`);
+          } else {
+            console.warn(`⚠️ No exchange rate found for ${currencySymbol}`);
+            console.log(`Available rates:`, Object.keys(freshRates));
+            // Use existing calculation
+            newPrices[asset.name] = asset.value / asset.amount;
+          }
+        });
+      }
+
+      // Update state with new prices
       setRealTimePrices(newPrices);
 
-      // Update portfolio values dengan new prices
+      // Update portfolio values with new prices
       const updatedPortfolios = portfolios.map(p => {
         if (p.id === activePortfolioId) {
           return {
@@ -244,23 +302,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         return p;
       });
 
-      setPortfolios(prevPortfolios => 
-        prevPortfolios.map(p => {
-          if (p.id === activePortfolioId) {
-            return {
-              ...p,
-              assets: p.assets.map(a => {
-                const currentPrice = newPrices[a.name] || (a.value / a.amount);
-                return {
-                  ...a,
-                  value: currentPrice * a.amount
-                };
-              })
-            };
-          }
-          return p;
-        })
-      );
+      setPortfolios(updatedPortfolios);
       setPriceUpdateTime(new Date().toLocaleTimeString());
       
     } catch (error) {
@@ -356,13 +398,10 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
   }, [activePortfolio]);
 
   const formatValue = useCallback((val, curr) => {
-    const converted = val * rates[curr];
-    
-    // LOGIKA BARU: 
-    // - IDR: 0 desimal
-    // - USD/CAD: absolut nilai < 2 = 5 desimal, absolut nilai >= 2 = 2 desimal
-    if (curr === 'IDR') {
-      // Untuk IDR, tampilkan tanpa desimal
+    const converted = val * (rates[curr] || 1);
+    const noDecimalCurrencies = ['IDR', 'JPY'];
+
+    if (noDecimalCurrencies.includes(curr)) {
       return new Intl.NumberFormat(getLocale(curr), {
         style: 'currency',
         currency: curr,
@@ -547,7 +586,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         // Calculate new total cost and amount for BUY
         const existingCostUSD = existingAsset.avgBuy * existingAsset.amount;
         const newTotalCostUSD = existingCostUSD + txValueInUSD;
-        const newTotalAmount = existingAsset.amount + txQty;
+        const newTotalAmount = Number((existingAsset.amount + txQty).toFixed(8));
         
         // Create new transaction record
         const newTransaction = {
@@ -580,7 +619,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         console.log('DEBUG: Updated asset:', portfolio.assets[existingAssetIndex]);
       } else {
         // SELL transaction
-        const newAmount = Math.max(0, existingAsset.amount - txQty);
+        const newAmount = Math.max(0, Number((existingAsset.amount - txQty).toFixed(8)));
         
         // Create sell transaction record
         const newTransaction = {
@@ -717,7 +756,8 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
               <span className="text-zinc-400">Value: </span> {formatValue(data.value, currency)}
             </p>
             <p className="text-[#D3AC2C] text-sm tabular-nums">
-              <span className="text-zinc-400">Holdings: </span> {data.amount}
+              <span className="text-zinc-400">Holdings: </span> 
+              {Number(parseFloat(data.amount).toFixed(8))}
             </p>
             <p className={`text-sm tabular-nums font-bold ${pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
               <span className="text-zinc-400">PnL: </span> 
@@ -1002,7 +1042,9 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
                       <td className="py-6 text-zinc-400 font-bold">{allocation.toFixed(1)}%</td>
 
                       {/* Holdings Amount */}
-                      <td className="py-6 text-white font-bold">{item.amount}</td>
+                      <td className="py-6 text-white font-bold">
+                        {Number(parseFloat(item.amount).toFixed(8))}
+                      </td>
 
                       {/* Current Market Price */}
                       <td className="py-6 text-[#D3AC2C] font-bold">{formatValue(currentPrice, currency)}</td>
@@ -1182,6 +1224,15 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
                     <optgroup label="Stocks">
                       {ASSET_LIBRARY
                         .filter(a => a.type === 'stock')
+                        .map(asset => (
+                          <option key={asset.id} value={asset.name}>
+                            {asset.name} ({asset.symbol})
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Cash & Currencies">
+                      {ASSET_LIBRARY
+                        .filter(a => a.type === 'cash')
                         .map(asset => (
                           <option key={asset.id} value={asset.name}>
                             {asset.name} ({asset.symbol})

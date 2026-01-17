@@ -1,4 +1,3 @@
-// src/components/AssetHistory.jsx
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -116,14 +115,21 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
 
   // Format value dengan kurs
   const formatValue = useCallback((val, targetCurrency = localCurrency) => {
+    // val is ALWAYS assumed to be in USD
     const converted = val * (rates[targetCurrency] || 1);
-    const decimals = targetCurrency === 'IDR' ? 0 : (converted < 1 ? 5 : 2);
+    
+    // Currencies that typically don't use decimals
+    const noDecimalCurrencies = ['IDR', 'JPY'];
+    const isNoDecimal = noDecimalCurrencies.includes(targetCurrency);
+    
+    const decimals = isNoDecimal ? 0 : (Math.abs(converted) < 2 ? 5 : 2);
+    
     return new Intl.NumberFormat(targetCurrency === 'IDR' ? 'id-ID' : 'en-US', {
       style: 'currency', 
       currency: targetCurrency, 
       minimumFractionDigits: decimals, 
       maximumFractionDigits: decimals
-    }).format(converted);
+    }).format(isNoDecimal ? Math.round(converted) : converted);
   }, [localCurrency, rates]);
 
   const formatDate = (dateString) => {
@@ -149,28 +155,27 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
 
   // Initialize edit form with transaction data
   const startEditTransaction = (transaction) => {
-    // Convert transaction price to selected edit currency
-    const priceInEditCurrency = convertFromUSD(transaction.price, editFormData.editCurrency);
+    // Use priceUSD as the base for conversion to the edit currency
+    const basePriceUSD = transaction.priceUSD || convertToUSD(transaction.price, transaction.currency);
+    
+    // FIX: Change 'targetCurrency' to 'localCurrency'
+    const priceInEditCurrency = convertFromUSD(basePriceUSD, localCurrency);
     
     setEditFormData({
       type: transaction.type,
-      price: priceInEditCurrency.toFixed(5),
+      // FIX: Change 'targetCurrency' to 'localCurrency'
+      price: priceInEditCurrency.toFixed(localCurrency === 'IDR' ? 0 : 5), 
       amount: transaction.amount.toString(),
       date: transaction.date,
-      editCurrency: editFormData.editCurrency // Keep current edit currency
+      editCurrency: localCurrency // Set this to the current view currency
     });
     setEditingTxId(transaction.id);
   };
 
   // Fungsi untuk mengedit transaksi
   const saveTransactionEdit = (transactionId) => {
-    if (!editFormData.date || !editFormData.price || !editFormData.amount || !editFormData.type) {
-      alert('Please fill all required fields');
-      return;
-    }
-
-    // Convert price from edit currency to USD (base currency)
-    const priceUSD = convertToUSD(parseFloat(editFormData.price), editFormData.editCurrency);
+    const originalPrice = parseFloat(editFormData.price);
+    const priceUSD = convertToUSD(originalPrice, editFormData.editCurrency);
     const amount = parseFloat(editFormData.amount);
     const valueUSD = priceUSD * amount;
 
@@ -178,37 +183,39 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
       if (p.id === parseInt(portfolioId)) {
         const updatedAssets = p.assets.map(a => {
           if (a.id === parseInt(assetId)) {
-            // Update transaction
+            // 1. Calculate the current market price per unit BEFORE updating
+            // We use the existing total value divided by the existing amount
+            const currentUnitPrice = a.value / a.amount;
+
             const newTransactions = a.transactions.map(t => 
               t.id === transactionId ? { 
                 ...t, 
                 type: editFormData.type,
-                price: priceUSD,
+                price: originalPrice,
+                priceUSD: priceUSD,
+                currency: editFormData.editCurrency,
                 amount: amount,
                 value: valueUSD,
                 date: editFormData.date
               } : t
             );
 
-            // Re-kalkulasi metrics aset
+            // 2. Recalculate net amount
             const buyTxs = newTransactions.filter(t => t.type === 'BUY');
             const sellTxs = newTransactions.filter(t => t.type === 'SELL');
             const netAmount = buyTxs.reduce((s, t) => s + t.amount, 0) - sellTxs.reduce((s, t) => s + t.amount, 0);
+            
             const totalCost = buyTxs.reduce((s, t) => s + t.value, 0);
-            const newAvgBuy = buyTxs.length > 0 ? totalCost / buyTxs.reduce((s, t) => s + t.amount, 0) : 0;
-            
-            // Dapatkan tanggal pembelian pertama
-            const sortedDates = newTransactions
-              .filter(t => t.type === 'BUY')
-              .map(t => t.date)
-              .sort((a, b) => new Date(a) - new Date(b));
-            
+            const newAvgBuy = buyTxs.reduce((s, t) => s + t.amount, 0) > 0 
+              ? totalCost / buyTxs.reduce((s, t) => s + t.amount, 0) 
+              : 0;
+
             return { 
               ...a, 
               amount: netAmount, 
               avgBuy: newAvgBuy, 
-              value: a.value, // Nilai akan di-update berdasarkan harga real-time nanti
-              purchaseDate: sortedDates[0] || a.purchaseDate,
+              // 3. FIX: Update the value immediately using the current price
+              value: currentUnitPrice * netAmount, 
               transactions: newTransactions 
             };
           }
@@ -221,13 +228,6 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
     
     setPortfolios(updatedPortfolios);
     setEditingTxId(null);
-    setEditFormData({
-      type: 'BUY',
-      price: '',
-      amount: '',
-      date: '',
-      editCurrency: 'USD'
-    });
   };
 
   const removeTransaction = (transactionId) => {
@@ -374,8 +374,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                 >
                   {assetInfo?.icon ? (
                     <img 
-                      src={assetInfo.icon} 
-                      alt={asset.name} 
+                      src={assetInfo.icon}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -393,7 +392,9 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
           <div className="flex flex-wrap gap-10">
             <div>
               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mb-1">Total Holdings</p>
-              <p className="text-3xl font-bold text-white tabular-nums">{asset.amount} <span className="text-sm text-zinc-600 ml-1">units</span></p>
+              <p className="text-3xl font-bold text-white tabular-nums">
+                {parseFloat(asset.amount.toFixed(8))} <span className="text-sm text-zinc-600 ml-1">units</span>
+              </p>
             </div>
             <div>
               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mb-1">Market Value</p>
@@ -584,57 +585,18 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                         )}
                       </td>
                       
-                      {/* PRICE - EDITABLE WITH CURRENCY */}
+                      {/* PRICE - Use priceUSD for conversion */}
                       <td className="py-6 text-center">
-                        {editingTxId === transaction.id ? (
-                          <div className="flex flex-col gap-2 items-center">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.00001"
-                                className="bg-black border border-zinc-700 p-2 rounded text-sm text-[#D3AC2C] text-center w-32"
-                                value={editFormData.price}
-                                onChange={(e) => setEditFormData({...editFormData, price: e.target.value})}
-                              />
-                              <select
-                                className="bg-black border border-zinc-700 p-2 rounded text-xs text-white"
-                                value={editFormData.editCurrency}
-                                onChange={(e) => {
-                                  // Convert price when changing currency
-                                  const oldPrice = parseFloat(editFormData.price) || 0;
-                                  const oldCurrency = editFormData.editCurrency;
-                                  const newCurrency = e.target.value;
-                                  
-                                  // Convert from old currency to USD, then to new currency
-                                  const priceUSD = convertToUSD(oldPrice, oldCurrency);
-                                  const priceInNewCurrency = convertFromUSD(priceUSD, newCurrency);
-                                  
-                                  setEditFormData({
-                                    ...editFormData,
-                                    editCurrency: newCurrency,
-                                    price: priceInNewCurrency.toFixed(5)
-                                  });
-                                }}
-                              >
-                                <option value="USD">USD</option>
-                                <option value="CAD">CAD</option>
-                                <option value="IDR">IDR</option>
-                              </select>
-                            </div>
-                            <div className="text-xs text-zinc-500">
-                              ≈ {formatValue(convertToUSD(parseFloat(editFormData.price) || 0, editFormData.editCurrency), 'USD')}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col">
-                            <span className="text-[#D3AC2C] font-semibold">
-                              {formatValue(transaction.price)}
-                            </span>
-                            <span className="text-xs text-zinc-500 mt-1">
-                              ≈ {formatValue(transaction.price, 'USD')}
-                            </span>
-                          </div>
-                        )}
+                        <div className="flex flex-col">
+                          <span className="text-[#D3AC2C] font-semibold">
+                            {/* Pass priceUSD so formatValue converts it to localCurrency */}
+                            {formatValue(transaction.priceUSD || convertToUSD(transaction.price, transaction.currency))}
+                          </span>
+                          <span className="text-xs text-zinc-500 mt-1">
+                            {/* Show original entry as reference */}
+                            {transaction.price} {transaction.currency}
+                          </span>
+                        </div>
                       </td>
                       
                       {/* AMOUNT */}
@@ -654,7 +616,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                         )}
                       </td>
                       
-                      {/* TOTAL VALUE */}
+                      {/* TOTAL VALUE - Value is already stored in USD */}
                       <td className="py-6 text-center">
                         <div className="flex flex-col">
                           <span className="text-white font-bold">
@@ -667,7 +629,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                       </td>
                       
                       {/* ACTIONS */}
-                      <td className="py-6 text-center">
+<td className="py-6 text-center">
                         {editingTxId === transaction.id ? (
                           <div className="flex flex-col gap-2 items-center">
                             <div className="flex gap-2">

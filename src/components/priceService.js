@@ -70,3 +70,48 @@ export const fetchStockPrice = async (symbol, currentIdrRate) => {
     return 0;
   }
 };
+
+export const fetchForexPrice = async (currencySymbol) => {
+  try {
+    // Fetch fresh exchange rates
+    const response = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await response.json();
+    const rates = data.rates || {};
+    
+    if (rates[currencySymbol]) {
+      // Price of 1 unit of foreign currency in USD
+      return 1 / rates[currencySymbol];
+    } else if (currencySymbol === 'USD') {
+      return 1;
+    } else {
+      console.warn(`Exchange rate not found for ${currencySymbol}`);
+      return 0;
+    }
+  } catch (error) {
+    console.error(`Error fetching forex for ${currencySymbol}:`, error);
+    return 0;
+  }
+};
+
+
+export const fetchExchangeRates = async () => {
+  try {
+    const response = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await response.json();
+    return data.rates; // Returns { USD: 1, IDR: 15600, CHF: 0.86, ... }
+  } catch (error) {
+    console.error("Error fetching rates:", error);
+    return null;
+  }
+};
+
+export const fetchAIInsights = async (symbol) => {
+  try {
+    const response = await fetch(`${BACKEND_URL}/get-ai-insight?symbol=${symbol}`);
+    if (!response.ok) throw new Error('AI Insight failed');
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching AI insights:", error);
+    return null;
+  }
+};

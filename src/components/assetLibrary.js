@@ -236,6 +236,77 @@ export const ASSET_LIBRARY = [
     description: 'Meta Platforms Inc.',
     color: "#0668E1", 
     icon: '/images/meta.png'
+  },
+  // Cash / Currencies
+  {
+    id: 'idr-cash',
+    name: 'Indonesian Rupiah',
+    symbol: 'IDR',
+    type: 'cash',
+    category: 'Currency',
+    description: 'Cash balance in IDR',
+    color: '#2D6A4F', // Deep Emerald Green
+    icon: '/images/idr.png'
+  },
+  {
+    id: 'usd-cash',
+    name: 'US Dollar',
+    symbol: 'USD',
+    type: 'cash',
+    category: 'Currency',
+    description: 'Cash balance in USD',
+    color: '#40916C', // Mint Green
+    icon: '/images/usd.png'
+  },
+  {
+    id: 'cad-cash',
+    name: 'Canadian Dollar',
+    symbol: 'CAD',
+    type: 'cash',
+    category: 'Currency',
+    description: 'Cash balance in CAD',
+    color: '#E5383B', // Crimson Red
+    icon: '/images/cad.png'
+  },
+  {
+    id: 'chf-cash',
+    name: 'Swiss Franc',
+    symbol: 'CHF',
+    type: 'cash',
+    category: 'Currency',
+    description: 'Cash balance in CHF',
+    color: '#7209B7', // Deep Purple
+    icon: '/images/chf.svg'
+  },
+  {
+    id: 'cny-cash',
+    name: 'Chinese Yuan',
+    symbol: 'CNY',
+    type: 'cash',
+    category: 'Currency',
+    description: 'Cash balance in CNY',
+    color: '#FF4D6D', // Rose Pink
+    icon: '/images/cny.png'
+  },
+  {
+    id: 'jpy-cash',
+    name: 'Japanese Yen',
+    symbol: 'JPY',
+    type: 'cash',
+    category: 'Currency',
+    description: 'Cash balance in JPY',
+    color: '#3A0CA3', // Indigo
+    icon: '/images/jpy.png'
+  },
+  {
+    id: 'sgd-cash',
+    name: 'Singapore Dollar',
+    symbol: 'SGD',
+    type: 'cash',
+    category: 'Currency',
+    description: 'Cash balance in SGD',
+    color: '#4361EE', // Electric Blue
+    icon: '/images/sgd.png'
   }
 ];
 
