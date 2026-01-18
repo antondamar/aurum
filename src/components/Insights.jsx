@@ -10,24 +10,13 @@ const Insights = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
+  const [timeframe, setTimeframe] = useState('2y');
 
   const BACKEND_URL = 'https://aurum-backend-tpaz.onrender.com';
 
   useEffect(() => {
     if (paramSymbol) setSelectedSymbol(paramSymbol);
   }, [paramSymbol]);
-
-  const syncHistoricalData = async () => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/get-historical-data?symbol=${selectedSymbol}`);
-      const data = await response.json();
-      setSyncStatus(data);
-      return data;
-    } catch (err) {
-      setSyncStatus({ error: "Sync failed" });
-      throw err;
-    }
-  };
 
   const handleStartAnalysis = async () => {
     setLoading(true);
@@ -36,15 +25,11 @@ const Insights = () => {
     setSyncStatus(null);
 
     try {
-      // 1. Sync data first (force refresh)
-      await syncHistoricalData();
+      // REMOVED: await syncHistoricalData(); 
+      // The backend /get-ai-insight already calls sync if data is missing.
       
-      // 2. Wait for data to process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // 3. Get AI insights
       const response = await fetch(
-        `${BACKEND_URL}/get-ai-insight?symbol=${selectedSymbol}&interval=${interval}`
+        `${BACKEND_URL}/get-ai-insight?symbol=${selectedSymbol}&interval=${interval}&timeframe=${timeframe}`
       );
       const data = await response.json();
       
@@ -59,21 +44,13 @@ const Insights = () => {
       setLoading(false);
     }
   };
-
+  
   const getRiskColor = (risk) => {
     switch (risk?.toUpperCase()) {
       case 'LOW': return 'bg-green-500';
       case 'MEDIUM': return 'bg-yellow-500';
       case 'HIGH': return 'bg-red-500';
-      default: return 'bg-zinc-700';
-    }
-  };
-
-  const getSentimentColor = (sentiment) => {
-    switch (sentiment?.toLowerCase()) {
-      case 'positive': return 'text-green-400';
-      case 'negative': return 'text-red-400';
-      default: return 'text-yellow-400';
+      default: return '';
     }
   };
 
@@ -85,14 +62,23 @@ const Insights = () => {
     }
   };
 
+  const formatCurrency = (val) => {
+    if (!val || isNaN(val)) return "$0.00";
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2
+    }).format(val);
+  };
+
   return (
-    <div className="pt-24 px-4 md:px-8 max-w-7xl mx-auto pb-32">
-      <header className="mb-10 text-center">
+    <div className="pt-14 px-4 md:px-8 max-w-7xl mx-auto pb-32">
+      <header className="mb-16 text-center">
         <h1 className="text-5xl md:text-6xl font-black tracking-tighter text-white">
           AI <span className="gold-text">Technical Analyst</span>
         </h1>
-        <p className="text-zinc-500 uppercase tracking-widest text-[10px] font-bold mt-4">
-          Professional Pattern Recognition & Fibonacci Analysis
+        <p className="text-zinc-400 uppercase tracking-widest text-[12px] font-bold mt-4">
+          Indicator Analysis & Pattern Recognition
         </p>
       </header>
 
@@ -112,21 +98,54 @@ const Insights = () => {
             </select>
           </div>
 
+          {/* Timeframe Selection - Fixed options */}
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Analysis Mode</label>
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Timeframe</label>
+            <select 
+              className="bg-black border border-zinc-800 p-3 rounded-xl text-white outline-none focus:border-[#D3AC2C]"
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value)}
+            >
+              {interval === 'daily' ? (
+                <>
+                  <option value="15d">15 Days</option>
+                  <option value="1m">1 Month</option>
+                  <option value="2m">2 Months</option>
+                  <option value="3m">3 Months</option>
+                  <option value="4m">4 Months</option>
+                  <option value="5m">5 Months</option>
+                  <option value="6m">6 Months</option>
+                  <option value="1y">1 Year</option>
+                  <option value="2y">2 Years</option>
+                  <option value="4y">4 Years</option>
+                  {selectedSymbol === 'BTC' && <option value="10y">10 Years</option>}
+                </>
+              ) : (
+                <>
+                  <option value="1y">1 Year</option>
+                  <option value="2y">2 Years</option>
+                  <option value="3y">3 Years</option>
+                  <option value="4y">4 Years</option>
+                  <option value="5y">5 Years</option>
+                  {selectedSymbol === 'BTC' && <option value="10y">10 Years</option>}
+                </>
+              )}
+            </select>
+          </div>
+          
+          {/* Interval Mode */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Interval</label>
             <div className="flex gap-2 mt-2">
-              <button 
-                onClick={() => setInterval('daily')}
-                className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${interval === 'daily' ? 'bg-[#D3AC2C] text-black shadow-lg shadow-[#D3AC2C]/20' : 'bg-zinc-900 text-zinc-500 hover:text-white'}`}
-              >
-                SWING (6M)
-              </button>
-              <button 
-                onClick={() => setInterval('monthly')}
-                className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${interval === 'monthly' ? 'bg-[#D3AC2C] text-black shadow-lg shadow-[#D3AC2C]/20' : 'bg-zinc-900 text-zinc-500 hover:text-white'}`}
-              >
-                MACRO (4Y)
-              </button>
+              {['daily', 'monthly'].map(mode => (
+                <button 
+                  key={mode}
+                  onClick={() => setInterval(mode)}
+                  className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${interval === mode ? 'bg-[#D3AC2C] text-black' : 'bg-zinc-900 text-zinc-500'}`}
+                >
+                  {mode.toUpperCase()}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -162,6 +181,55 @@ const Insights = () => {
                   style={{ width: `${result.confidence_score || 0}%` }}
                 ></div>
               </div>  
+              <div className="aurum-card p-4 rounded-2xl bg-zinc-900/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-500 text-[9px] font-bold uppercase tracking-wider">
+                    {result.technical_summary?.volume?.period_label || 'Last Period'}
+                  </span>
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded ${
+                    result.technical_summary?.volume?.vs_average === 'Above Average' 
+                      ? 'bg-green-500/20 text-green-400' 
+                      : 'bg-red-500/20 text-red-400'
+                  }`}>
+                    {result.technical_summary?.volume?.change_pct > 0 ? '+' : ''}
+                    {result.technical_summary?.volume?.change_pct}%
+                  </span>
+                </div>
+                
+                <div className="flex items-baseline gap-2">
+                  <span className="text-white font-bold text-lg">
+                    {result.technical_summary?.volume?.last_period?.toLocaleString() || '0'}
+                  </span>
+                  <span className="text-zinc-600 text-[10px] uppercase">
+                    {result.analysis_metadata?.interval}
+                  </span>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-800/50">
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 text-[9px] uppercase">
+                      {result.technical_summary?.volume?.average_label || 'Average'}
+                    </span>
+                    <span className="text-zinc-400 text-xs font-medium">
+                      {result.technical_summary?.volume?.average?.toLocaleString() || '0'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Optional: Volume Trend Indicator */}
+                <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className={`h-full transition-all ${
+                      result.technical_summary?.volume?.vs_average === 'Above Average'
+                        ? 'bg-green-500'
+                        : 'bg-red-500'
+                    }`}
+                    style={{ 
+                      width: `${Math.min(100, Math.abs(result.technical_summary?.volume?.change_pct || 0) + 50)}%` 
+                    }}
+                  ></div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -216,25 +284,30 @@ const Insights = () => {
                       Current Price: <span className="text-white font-bold text-lg gold-text">
                         {result.technical_summary?.price_formatted || '$0'}
                       </span>
+                      {result.analysis_metadata?.price_source && (
+                        <span className="text-[10px] text-zinc-600 ml-2">
+                          ({result.analysis_metadata.price_source})
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
-                <div className="bg-black/40 p-6 rounded-2xl border border-zinc-800/50 italic text-zinc-300 text-lg leading-relaxed text-justify mb-5">
-                  "{result.verdict}"
+                <div className="bg-black/40 p-6 rounded-2xl border border-zinc-800/50 text-zinc-300 text-lg leading-relaxed text-justify mb-5">
+                  {result.verdict}
                 </div>
                 <div className="flex flex-col gap-3">
                   <div className={`px-2 py-3 rounded-full font-black text-sm tracking-widest text-center mb-5 ${getSuggestionColor(result.suggestion)}`}>
                     {result.suggestion || 'HOLD'}
                   </div>
                   <div className="text-center">
-                    <div className="text-[13px] font-bold text-zinc-300 uppercase tracking-widest">Recommended Action</div>
+                    <div className="text-[13px] font-bold gold-text uppercase tracking-widest">Recommended Action</div>
                     <div className="text-sm text-white font-medium">{result.recommended_action || 'Monitor key levels'}</div>
                   </div>
                 </div>
               </div>
 
-              {/* 2. QUICK STATS BAR */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 2. QUICK STATS BAR - Now only 2 items */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="aurum-card p-5 rounded-2xl flex items-center justify-between">
                   <span className="text-zinc-500 text-[10px] font-bold uppercase">Confidence</span>
                   <div className="flex items-center gap-3">
@@ -250,12 +323,6 @@ const Insights = () => {
                     {result.risk_assessment}
                   </span>
                 </div>
-                <div className="aurum-card p-5 rounded-2xl flex items-center justify-between">
-                  <span className="text-zinc-500 text-[10px] font-bold uppercase">News Sentiment</span>
-                  <span className={`font-black text-xs ${getSentimentColor(result.technical_summary?.news?.sentiment)}`}>
-                    {result.technical_summary?.news?.sentiment?.toUpperCase()}
-                  </span>
-                </div>
               </div>
 
               {/* 3. TECHNICAL DEEP-DIVE GRID */}
@@ -264,12 +331,20 @@ const Insights = () => {
                 <div className="aurum-card p-6 rounded-[2rem]">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Moving Averages</h3>
-                    <span className="text-[10px] text-white bg-zinc-800 px-2 py-1 rounded font-bold">{result.technical_summary?.moving_averages?.trend}</span>
+                    <span className="text-[10px] text-white px-2 py-1 rounded font-bold">*{result.technical_summary?.moving_averages?.trend}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 mb-6 text-center">
                     <div className="bg-black/40 p-3 rounded-xl">
+                      <div className="text-zinc-500 text-[9px] uppercase mb-1">MA13</div>
+                      <div className="text-white font-bold text-xs">{result.technical_summary?.moving_averages?.MA13}</div>
+                    </div>
+                    <div className="bg-black/40 p-3 rounded-xl">
                       <div className="text-zinc-500 text-[9px] uppercase mb-1">MA20</div>
                       <div className="text-white font-bold text-xs">{result.technical_summary?.moving_averages?.MA20}</div>
+                    </div>
+                    <div className="bg-black/40 p-3 rounded-xl">
+                      <div className="text-zinc-500 text-[9px] uppercase mb-1">MA21</div>
+                      <div className="text-white font-bold text-xs">{result.technical_summary?.moving_averages?.MA21}</div>
                     </div>
                     <div className="bg-black/40 p-3 rounded-xl">
                       <div className="text-zinc-500 text-[9px] uppercase mb-1">MA50</div>
@@ -278,6 +353,10 @@ const Insights = () => {
                     <div className="bg-black/40 p-3 rounded-xl">
                       <div className="text-zinc-500 text-[9px] uppercase mb-1">MA200</div>
                       <div className="text-white font-bold text-xs">{result.technical_summary?.moving_averages?.MA200}</div>
+                    </div>
+                    <div className="bg-black/40 p-3 rounded-xl">
+                      <div className="text-zinc-500 text-[9px] uppercase mb-1">Alignment</div>
+                      <div className="text-white font-bold text-xs text-[10px]">{result.technical_summary?.moving_averages?.alignment}</div>
                     </div>
                   </div>
                   <p className="text-zinc-300 text-xs leading-relaxed border-t border-zinc-800 pt-4">{result.ma_analysis}</p>
@@ -303,31 +382,95 @@ const Insights = () => {
                 </div>
               </div>
 
-              {/* 4. PATTERNS & NEWS ROW */}
+              
+
+              {/* 4. VOLUME ANALYSIS SECTION */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="aurum-card p-6 rounded-[2rem]">
-                  <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-4">Detected Patterns</h3>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {result.patterns?.map((p, i) => (
-                      <span key={i} className="px-3 py-1 bg-zinc-800 text-zinc-300 text-[10px] rounded-lg border border-zinc-700">{p}</span>
-                    ))}
+                  <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-4">
+                    Volume Analysis
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="bg-black/40 p-4 rounded-xl">
+                      <div className="text-zinc-500 text-[9px] uppercase mb-2">
+                        {result.technical_summary?.volume?.period_label}
+                      </div>
+                      <div className="text-white font-bold text-lg">
+                        {(result.technical_summary?.volume?.last_period / 1000000).toFixed(2)}M
+                      </div>
+                      <div className={`text-[10px] font-bold mt-1 ${
+                        result.technical_summary?.volume?.vs_average === 'Above Average'
+                          ? 'text-green-400'
+                          : 'text-red-400'
+                      }`}>
+                        {result.technical_summary?.volume?.vs_average}
+                      </div>
+                    </div>
+
+                    <div className="bg-black/40 p-4 rounded-xl">
+                      <div className="text-zinc-500 text-[9px] uppercase mb-2">
+                        {result.technical_summary?.volume?.average_label}
+                      </div>
+                      <div className="text-white font-bold text-lg">
+                        {(result.technical_summary?.volume?.average / 1000000).toFixed(2)}M
+                      </div>
+                      <div className="text-zinc-500 text-[10px] font-bold mt-1">
+                        {result.technical_summary?.volume?.change_pct > 0 ? '+' : ''}
+                        {result.technical_summary?.volume?.change_pct}%
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-zinc-300 text-xs leading-relaxed italic border-t border-zinc-800 pt-4">"{result.support_resistance_analysis}"</p>
+
+                  <div className="mb-4">
+                    <div className="flex justify-between text-xs mb-2">
+                      <span className="text-zinc-500">Volume Trend</span>
+                      <span className={`font-bold ${
+                        result.technical_summary?.volume?.vs_average === 'Above Average'
+                          ? 'text-green-400'
+                          : 'text-red-400'
+                      }`}>
+                        {result.technical_summary?.volume?.vs_average}
+                      </span>
+                    </div>
+                    <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className={`h-full transition-all ${
+                          result.technical_summary?.volume?.vs_average === 'Above Average'
+                            ? 'bg-green-500'
+                            : 'bg-red-500'
+                        }`}
+                        style={{ 
+                          width: `${50 + (result.technical_summary?.volume?.change_pct / 2)}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <p className="text-zinc-300 text-xs leading-relaxed border-t border-zinc-800 pt-4">
+                    {result.volume_analysis || 'Volume analysis indicates moderate market participation.'}
+                  </p>
                 </div>
 
+                {/* Patterns Section (existing) */}
                 <div className="aurum-card p-6 rounded-[2rem]">
-                  <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-4">Market News Impact</h3>
-                  <p className="text-zinc-300 text-xs leading-relaxed mb-4">{result.news_impact}</p>
-                  <div className="space-y-2 border-t border-zinc-800 pt-4">
-                    {result.technical_summary?.news?.headlines?.slice(0, 2).map((h, i) => (
-                      <div key={i} className="text-[10px] text-zinc-500 flex gap-2">
-                        <span className="text-[#D3AC2C]">•</span>
-                        <span className="truncate">{h}</span>
-                      </div>
+                  <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-4">
+                    Detected Patterns
+                  </h3>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {result.patterns?.map((p, i) => (
+                      <span key={i} className="px-3 py-1 bg-[#D3AC2C]/5 gold-text text-[12px] rounded-lg border border-zinc-700">
+                        {p}
+                      </span>
                     ))}
                   </div>
+                  <p className="text-zinc-300 text-xs leading-relaxed border-t border-zinc-800 pt-4">
+                    {result.support_resistance_analysis}
+                  </p>
                 </div>
               </div>
+
+
 
               {/* 5. STRATEGIC ACTION PLAN */}
               <div className="aurum-card p-8 rounded-[2.5rem] bg-gradient-to-br from-zinc-900/80 to-black border border-zinc-800">
@@ -340,7 +483,9 @@ const Insights = () => {
                       {Object.entries(result.key_levels || {}).map(([level, val]) => (
                         <div key={level} className="flex justify-between items-center py-2 border-b border-zinc-800/50">
                           <span className="text-zinc-500 text-xs capitalize">{level.replace(/_/g, ' ')}</span>
-                          <span className="text-white font-mono text-sm font-bold">{val}</span>
+                          <span className="text-white text-sm font-bold bg-black/40 px-3 py-1 rounded-lg">
+                            {typeof val === 'number' ? formatCurrency(val) : val}
+                          </span>
                         </div>
                       ))}
                     </div>
