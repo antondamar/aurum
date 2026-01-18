@@ -1,6 +1,7 @@
 // src/components/tools/GoalPriceTool.jsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { fetchCryptoPrice, fetchStockPrice, fetchBatchCryptoPrices } from '../priceService';
+import { motion } from 'framer-motion';
 
 const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
   const [targetPrices, setTargetPrices] = useState({});
@@ -9,6 +10,13 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
   const [priceUpdateTime, setPriceUpdateTime] = useState(null);
   const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
   const [currentPrices, setCurrentPrices] = useState({});
+  const [localCurrency, setLocalCurrency] = useState(currency);
+  const [hoveredCurrency, setHoveredCurrency] = useState(null);
+  const [isHoveringSwitcher, setIsHoveringSwitcher] = useState(false);
+
+  useEffect(() => {
+    setLocalCurrency(currency);
+  }, [currency]);
 
   // Conversion functions that handle the rates properly
   const convertToUSD = useMemo(() => (value, fromCurrency) => {
@@ -240,7 +248,7 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
                 Current Total Portfolio Value
               </p>
               <p className="text-3xl font-black text-white tracking-tighter">
-                {formatCurrency(totals.currentTotal)}
+                {formatCurrency(totals.currentTotal, localCurrency)}
               </p>
             </div>
             
@@ -263,17 +271,51 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
             </div>
           </div>
 
-          <div className="aurum-card p-8 rounded-[2.5rem] bg-black/40 backdrop-blur-md border border-[#D3AC2C]/20 text-center">
+         <div className="aurum-card p-8 rounded-[2.5rem] bg-black/40 backdrop-blur-md border border-[#D3AC2C]/20 text-center">
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.3em] mb-4">
               Projected Net Worth
             </p>
             <p className="text-6xl font-black text-[#D3AC2C] tracking-tighter mb-4 tabular-nums">
-              {formatCurrency(totals.projectedTotal)}
+              {formatCurrency(totals.projectedTotal, localCurrency)}
             </p>
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${isPositive ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+            
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border mb-7 ${isPositive ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
               <span className={`font-bold text-sm ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
                 {isPositive ? '↑' : '↓'} {Math.abs(totals.percentChange).toFixed(1)}% Potential
               </span>
+            </div>
+
+            {/* NEW: CURRENCY SWITCHER (Identical to Allocation Planner) */}
+            <div 
+              className="relative flex bg-zinc-900/50 p-1 rounded-full border border-white/5 w-fit mx-auto"
+              onMouseEnter={() => setIsHoveringSwitcher(true)}
+              onMouseLeave={() => {
+                setIsHoveringSwitcher(false);
+                setHoveredCurrency(null);
+              }}
+            >
+              {['USD', 'CAD', 'IDR'].map((curr) => (
+                <div 
+                  key={curr} 
+                  className="relative px-6 py-2 cursor-pointer z-10" 
+                  onMouseEnter={() => setHoveredCurrency(curr)} 
+                  onClick={() => setLocalCurrency(curr)}
+                >
+                  <span className={`text-xs font-bold transition-colors duration-200 ${
+                    (isHoveringSwitcher ? hoveredCurrency === curr : localCurrency === curr) ? 'text-black' : 'text-zinc-500'
+                  }`}>
+                    {curr}
+                  </span>
+                </div>
+              ))}
+              <motion.div
+                className="absolute inset-y-1 bg-[#D3AC2C] rounded-full z-0"
+                animate={{ 
+                  x: `${['USD', 'CAD', 'IDR'].indexOf(isHoveringSwitcher && hoveredCurrency ? hoveredCurrency : localCurrency) * 100}%` 
+                }}
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                style={{ width: '33.33%' }}
+              />
             </div>
           </div>
         </div>
