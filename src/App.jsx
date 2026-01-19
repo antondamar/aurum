@@ -163,19 +163,15 @@ function App() {
     const syncData = async () => {
       if (user && isDataLoaded) { 
         const currentTabId = sessionStorage.getItem('tabId');
-        const lastSource = localStorage.getItem('lastProfileUpdateSource');
         
-        localStorage.setItem('lastProfileUpdateSource', currentTabId);
-        // Only sync if this tab is the one that made the change
-        if (lastSource !== currentTabId && lastSource !== null) return;
-
         try {
           const docRef = doc(db, "users", user.uid);
           await setDoc(docRef, {
             portfolios,
             assetMasterList,
             ...profileData,
-            lastUpdated: new Date().toISOString()
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentTabId // TAG THE UPDATE WITH THIS TAB'S ID
           }, { merge: true });
         } catch (error) {
           console.error("Cloud Sync Error:", error);
@@ -233,35 +229,24 @@ function App() {
     if (!user) return;
 
     const userDocRef = doc(db, "users", user.uid);
+    const currentTabId = sessionStorage.getItem('tabId');
     
-    // Listen ONLY for profile changes
     const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const freshData = docSnapshot.data();
         
-        // Only update if there are actual differences in profile data
-        if (freshData.username !== profileData.username || 
-            freshData.firstName !== profileData.firstName || 
-            freshData.lastName !== profileData.lastName) {
+        // GUARD: Only update if the change came from a DIFFERENT tab
+        if (freshData.updatedBy !== currentTabId) {
+          console.log("🔄 Syncing all data from another tab");
           
-          console.log("📱 Profile updated from another tab/window");
-          
-          // Update profile data from Firestore
+          // Update everything to match the cloud (Tab A's state)
+          setPortfolios(freshData.portfolios || []);
+          setAssetMasterList(freshData.assetMasterList || []);
           setProfileData({
             username: freshData.username || '',
             firstName: freshData.firstName || '',
             lastName: freshData.lastName || ''
           });
-          
-          // Show a notification to the user
-          if (typeof window !== 'undefined' && 'Notification' in window) {
-            if (Notification.permission === 'granted') {
-              new Notification('Profile Updated', {
-                body: 'Your profile was updated in another tab/window.',
-                icon: '/favicon.ico'
-              });
-            }
-          }
         }
       }
     });

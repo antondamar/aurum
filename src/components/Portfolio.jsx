@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Sector, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 import { db, auth } from '../firebase';
 import { doc, setDoc } from 'firebase/firestore';
@@ -30,6 +30,54 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
   const [priceUpdateTime, setPriceUpdateTime] = useState(null);
 
   const [portfolioSettings, setPortfolioSettings] = useState({});
+  const location = useLocation();
+  const calculateFIFOMetrics = useCallback((transactions) => {
+    if (!transactions || transactions.length === 0) return { costBasis: 0, amount: 0, realizedPnL: 0 };
+
+    // Sort transactions by date (oldest first)
+    const sortedTxs = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    let buyLots = []; // To track remaining quantities of each buy
+    let totalRealizedPnL = 0;
+
+    sortedTxs.forEach(tx => {
+      if (tx.type === 'BUY') {
+        buyLots.push({
+          remainingAmount: tx.amount,
+          priceUSD: tx.priceUSD,
+          originalAmount: tx.amount // Keep track of original for reference
+        });
+      } else if (tx.type === 'SELL') {
+        let amountToSell = tx.amount;
+        const sellValueUSD = tx.value; // This should be priceUSD * amount
+        
+        while (amountToSell > 0 && buyLots.length > 0) {
+          const lot = buyLots[0];
+          const sellFromThisLot = Math.min(amountToSell, lot.remainingAmount);
+          
+          // Calculate PnL for this portion
+          const costOfThisPortion = sellFromThisLot * lot.priceUSD;
+          const proceedsOfThisPortion = (sellValueUSD / tx.amount) * sellFromThisLot;
+          totalRealizedPnL += (proceedsOfThisPortion - costOfThisPortion);
+          
+          lot.remainingAmount -= sellFromThisLot;
+          amountToSell -= sellFromThisLot;
+
+          if (lot.remainingAmount <= 0) buyLots.shift();
+        }
+      }
+    });
+
+    // The cost basis of REMAINING holdings is the sum of (remaining amount * original buy price)
+    const remainingCostBasis = buyLots.reduce((sum, lot) => sum + (lot.remainingAmount * lot.priceUSD), 0);
+    const remainingAmount = buyLots.reduce((sum, lot) => sum + lot.remainingAmount, 0);
+
+    return { 
+      costBasis: remainingCostBasis, 
+      amount: remainingAmount, 
+      realizedPnL: totalRealizedPnL 
+    };
+  }, []);
 
   const COLOR_OPTIONS = [
     '#F7931A', '#627EEA', '#004A99', '#003D79', '#D4AF37', 
@@ -54,17 +102,48 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
   }, []);
 
   useEffect(() => {
-    if (portfolios.length > 0 && !activePortfolioId) {
+    console.log('Portfolio Debug:', {
+      locationState: location.state,
+      activePortfolioId,
+      portfoliosCount: portfolios.length,
+      portfolioNames: portfolios.map(p => ({ id: p.id, name: p.name }))
+    });
+    
+    // If we have location state from navigation (coming from AssetHistory)
+    if (location.state?.activePortfolioId) {
+      const incomingId = Number(location.state.activePortfolioId);
+      const portfolioExists = portfolios.find(p => p.id === incomingId);
+      
+      if (portfolioExists) {
+        console.log('Setting active portfolio from location state:', incomingId);
+        setActivePortfolioId(incomingId);
+        // Clear the state so it doesn't interfere with future selections
+        navigate(location.pathname, { replace: true, state: {} });
+      }
+    } 
+    // Only set default if we don't already have an active portfolio
+    else if (!activePortfolioId && portfolios.length > 0) {
+      console.log('Setting default portfolio to first one:', portfolios[0].id);
       setActivePortfolioId(portfolios[0].id);
     }
-  }, [portfolios]);
-  
+  }, [location.state, portfolios, navigate]);
+
+  useEffect(() => {
+    if (activePortfolioId && portfolios.length > 0) {
+      const portfolioExists = portfolios.find(p => p.id === activePortfolioId);
+      if (!portfolioExists && portfolios.length > 0) {
+        console.log('Active portfolio no longer exists, switching to:', portfolios[0].id);
+        setActivePortfolioId(portfolios[0].id);
+      }
+    }
+  }, [portfolios, activePortfolioId]);
+
   const defaultEmptyPortfolio = {
     id: 1,
     name: 'Main Portfolio',
     assets: []
   };
-
+  
   const activePortfolio = useMemo(() => {
     if (portfolios.length === 0) {
       return defaultEmptyPortfolio;
@@ -164,7 +243,6 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
   const updateAllPrices = async () => {
     if (activePortfolio.assets.length === 0) return;
     
-    console.log('🔄 Starting price update...');
     setIsUpdatingPrices(true);
     try {
       // Fetch fresh exchange rates EVERY TIME
@@ -285,33 +363,41 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
       // Update state with new prices
       setRealTimePrices(newPrices);
 
-      // Update portfolio values with new prices
-      const updatedPortfolios = portfolios.map(p => {
+      // In the updateAllPrices function, around line 195-215, update this section:
+    setPortfolios(prevPortfolios => {
+      return prevPortfolios.map(p => {
         if (p.id === activePortfolioId) {
           return {
             ...p,
             assets: p.assets.map(a => {
-              const currentPrice = newPrices[a.name] || (a.value / a.amount);
-              return {
-                ...a,
-                value: currentPrice * a.amount
-              };
+              const livePrice = newPrices[a.name];
+              if (livePrice) {
+                // CRITICAL: Preserve existing properties, only update value
+                return { 
+                  ...a, 
+                  value: livePrice * a.amount,
+                  // Ensure we don't lose other properties like transactions
+                  transactions: a.transactions || [],
+                  currencyMix: a.currencyMix || {}
+                };
+              }
+              return a;
             })
           };
         }
         return p;
       });
+    });
 
-      setPortfolios(updatedPortfolios);
       setPriceUpdateTime(new Date().toLocaleTimeString());
-      
     } catch (error) {
-      console.error('Error updating prices:', error);
+      console.error(error);
     } finally {
       setIsUpdatingPrices(false);
     }
   };
 
+  
   // Auto-update prices every 30 seconds
   useEffect(() => {
     if (activePortfolio.assets.length > 0) {
@@ -536,153 +622,87 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
     const rawPrice = newAsset.buyPrice.replace(/[^0-9.]/g, '');
     if (!rawPrice || !newAsset.amount || !newAsset.name) return;
 
-    console.log('DEBUG: Adding asset with name:', newAsset.name);
-    
     const assetColor = newAsset.color || getAssetColor(newAsset.name);
     const txPriceInOriginalCurrency = parseFloat(rawPrice);
-    
-    // Convert to USD using the exchange rate at the time of transaction
     const exchangeRateAtTransaction = rates[newAsset.currency] || 1;
     const txPriceInUSD = txPriceInOriginalCurrency / exchangeRateAtTransaction;
-    
     const txQty = parseFloat(newAsset.amount);
     const txValueInUSD = txPriceInUSD * txQty;
 
     const assetInfo = getAssetInfo(newAsset.name);
-    
-    // Always use the standardized name from the asset library
     const assetName = assetInfo?.name || newAsset.name;
-    
-    console.log('DEBUG: Standardized asset name:', assetName);
-    console.log('DEBUG: Active portfolio assets:', activePortfolio.assets.map(a => ({
-      name: a.name,
-      amount: a.amount
-    })));
 
-    const currentMarketPrice = assetInfo?.type === 'crypto' ? 
-      realTimePrices[assetName] || txPriceInUSD : 
-      txPriceInUSD;
+    const currentMarketPrice = assetInfo?.type === 'crypto' 
+      ? realTimePrices[assetName] || txPriceInUSD 
+      : txPriceInUSD;
 
-    // Create a deep copy of portfolios
-    const updatedPortfolios = JSON.parse(JSON.stringify(portfolios));
-    
-    // Find the portfolio to update
-    const portfolioIndex = updatedPortfolios.findIndex(p => p.id === activePortfolioId);
-    if (portfolioIndex === -1) return;
-    
-    const portfolio = updatedPortfolios[portfolioIndex];
-    
-    // Find if asset already exists (using standardized name)
-    const existingAssetIndex = portfolio.assets.findIndex(a => a.name === assetName);
-    
-    console.log('DEBUG: Existing asset index:', existingAssetIndex);
-    
-    if (existingAssetIndex !== -1) {
-      // Asset exists - aggregate
-      const existingAsset = portfolio.assets[existingAssetIndex];
-      console.log('DEBUG: Found existing asset:', existingAsset);
+    // Use functional update to prevent state overwrites from multiple tabs/intervals
+    setPortfolios(prevPortfolios => {
+      const updatedPortfolios = JSON.parse(JSON.stringify(prevPortfolios));
+      const portfolioIndex = updatedPortfolios.findIndex(p => p.id === activePortfolioId);
       
-      if (newAsset.type === 'BUY') {
-        // Calculate new total cost and amount for BUY
-        const existingCostUSD = existingAsset.avgBuy * existingAsset.amount;
-        const newTotalCostUSD = existingCostUSD + txValueInUSD;
-        const newTotalAmount = Number((existingAsset.amount + txQty).toFixed(8));
-        
-        // Create new transaction record
-        const newTransaction = {
-          id: Date.now(),
-          date: newAsset.purchaseDate,
-          type: 'BUY',
-          price: txPriceInOriginalCurrency,
-          priceUSD: txPriceInUSD,
-          currency: newAsset.currency,
-          exchangeRate: exchangeRateAtTransaction,
-          amount: txQty,
-          value: txValueInUSD
-        };
-        
-        // Update the existing asset
-        portfolio.assets[existingAssetIndex] = {
-          ...existingAsset,
-          amount: newTotalAmount,
-          value: currentMarketPrice * newTotalAmount,
-          avgBuy: newTotalCostUSD / newTotalAmount,
-          color: newAsset.color || existingAsset.color,
-          transactions: [...(existingAsset.transactions || []), newTransaction],
-          purchaseDate: existingAsset.purchaseDate || newAsset.purchaseDate,
-          currencyMix: {
-            ...(existingAsset.currencyMix || {}),
-            [newAsset.currency]: (existingAsset.currencyMix?.[newAsset.currency] || 0) + txValueInUSD
-          }
-        };
-        
-        console.log('DEBUG: Updated asset:', portfolio.assets[existingAssetIndex]);
-      } else {
-        // SELL transaction
-        const newAmount = Math.max(0, Number((existingAsset.amount - txQty).toFixed(8)));
-        
-        // Create sell transaction record
-        const newTransaction = {
-          id: Date.now(),
-          date: newAsset.purchaseDate,
-          type: 'SELL',
-          price: txPriceInOriginalCurrency,
-          priceUSD: txPriceInUSD,
-          currency: newAsset.currency,
-          exchangeRate: exchangeRateAtTransaction,
-          amount: txQty,
-          value: txValueInUSD
-        };
-        
-        portfolio.assets[existingAssetIndex] = {
-          ...existingAsset,
-          amount: newAmount,
-          value: currentMarketPrice * newAmount,
-          transactions: [...(existingAsset.transactions || []), newTransaction]
-        };
-        
-        // If amount becomes 0, remove the asset
-        if (newAmount === 0) {
-          portfolio.assets.splice(existingAssetIndex, 1);
-        }
-      }
-    } else if (newAsset.type === 'BUY') {
-      // Create new asset
-      const newAssetData = {
+      if (portfolioIndex === -1) return prevPortfolios;
+      
+      const portfolio = updatedPortfolios[portfolioIndex];
+      const existingAssetIndex = portfolio.assets.findIndex(a => a.name === assetName);
+
+      // Create the new transaction object
+      const newTransaction = {
         id: Date.now(),
-        name: assetName,  // Use standardized name
-        symbol: assetInfo?.symbol || '',
-        value: currentMarketPrice * txQty,
-        avgBuy: txPriceInUSD,
+        date: newAsset.purchaseDate,
+        type: newAsset.type,
+        price: txPriceInOriginalCurrency,
+        priceUSD: txPriceInUSD,
+        currency: newAsset.currency,
+        exchangeRate: exchangeRateAtTransaction,
         amount: txQty,
-        color: assetColor,
-        purchaseDate: newAsset.purchaseDate,
-        transactions: [{
-          id: Date.now(),
-          date: newAsset.purchaseDate,
-          type: 'BUY',
-          price: txPriceInOriginalCurrency,
-          priceUSD: txPriceInUSD,
-          currency: newAsset.currency,
-          exchangeRate: exchangeRateAtTransaction,
-          amount: txQty,
-          value: txValueInUSD
-        }],
-        currencyMix: { [newAsset.currency]: txValueInUSD }
+        value: txValueInUSD
       };
-      
-      portfolio.assets.push(newAssetData);
-      console.log('DEBUG: Created new asset:', newAssetData);
-    }
-    
-    // Update the portfolio in the array
-    updatedPortfolios[portfolioIndex] = portfolio;
-    
-    console.log('DEBUG: Final portfolio assets:', portfolio.assets);
-    
-    // Update state
-    setPortfolios(updatedPortfolios);
-    
+
+      if (existingAssetIndex !== -1) {
+        const existingAsset = portfolio.assets[existingAssetIndex];
+        const updatedTransactions = [...(existingAsset.transactions || []), newTransaction];
+        
+        // Calculate new metrics using FIFO
+        const { costBasis, amount, firstDate } = calculateFIFOMetrics(updatedTransactions);
+
+        if (amount <= 0) {
+          // Remove asset if balance hits zero
+          portfolio.assets.splice(existingAssetIndex, 1);
+        } else {
+          portfolio.assets[existingAssetIndex] = {
+            ...existingAsset,
+            amount: amount,
+            value: currentMarketPrice * amount,
+            avgBuy: amount > 0 ? costBasis / amount : 0, // Avoid division by zero
+            transactions: updatedTransactions,
+            color: newAsset.color || existingAsset.color,
+            currencyMix: {
+              ...(existingAsset.currencyMix || {}),
+              [newAsset.currency]: (existingAsset.currencyMix?.[newAsset.currency] || 0) + (newAsset.type === 'BUY' ? txValueInUSD : -txValueInUSD)
+            },
+            purchaseDate: firstDate || existingAsset.purchaseDate // Add this
+          };
+        }
+      } else if (newAsset.type === 'BUY') {
+        // Create new asset entry
+        portfolio.assets.push({
+          id: Date.now(),
+          name: assetName,
+          symbol: assetInfo?.symbol || '',
+          value: currentMarketPrice * txQty,
+          avgBuy: txPriceInUSD,
+          amount: txQty,
+          color: assetColor,
+          purchaseDate: newAsset.purchaseDate,
+          transactions: [newTransaction],
+          currencyMix: { [newAsset.currency]: txValueInUSD }
+        });
+      }
+
+      return updatedPortfolios;
+    });
+
     // Reset form
     setNewAsset({ 
       name: 'Bitcoin (BTC)', 

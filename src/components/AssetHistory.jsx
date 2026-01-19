@@ -7,6 +7,76 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
   const { portfolioId, assetId } = useParams();
   const navigate = useNavigate();
 
+  const calculateFIFOMetrics = useCallback((transactions) => {
+    if (!transactions || transactions.length === 0) return { 
+      costBasis: 0, 
+      amount: 0, 
+      realizedPnL: 0,
+      firstDate: null 
+    };
+
+    // Sort transactions by date (oldest first)
+    const sortedTxs = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    let buyLots = [];
+    let totalRealizedPnL = 0;
+    let firstBuyDate = null;
+
+    sortedTxs.forEach(tx => {
+      if (tx.type === 'BUY') {
+        buyLots.push({
+          remainingAmount: tx.amount,
+          priceUSD: tx.priceUSD,
+          originalAmount: tx.amount
+        });
+        
+        // Track first buy date
+        if (!firstBuyDate || new Date(tx.date) < new Date(firstBuyDate)) {
+          firstBuyDate = tx.date;
+        }
+      } else if (tx.type === 'SELL') {
+        let amountToSell = tx.amount;
+        const sellValueUSD = tx.value;
+        
+        while (amountToSell > 0 && buyLots.length > 0) {
+          const lot = buyLots[0];
+          const sellFromThisLot = Math.min(amountToSell, lot.remainingAmount);
+          
+          const costOfThisPortion = sellFromThisLot * lot.priceUSD;
+          const proceedsOfThisPortion = (sellValueUSD / tx.amount) * sellFromThisLot;
+          totalRealizedPnL += (proceedsOfThisPortion - costOfThisPortion);
+          
+          lot.remainingAmount -= sellFromThisLot;
+          amountToSell -= sellFromThisLot;
+
+          if (lot.remainingAmount <= 0) buyLots.shift();
+        }
+      }
+    });
+
+    const remainingCostBasis = buyLots.reduce((sum, lot) => sum + (lot.remainingAmount * lot.priceUSD), 0);
+    const remainingAmount = buyLots.reduce((sum, lot) => sum + lot.remainingAmount, 0);
+
+    return { 
+      costBasis: remainingCostBasis, 
+      amount: remainingAmount, 
+      realizedPnL: totalRealizedPnL,
+      firstDate: firstBuyDate
+    };
+  }, []);
+
+  const handleBackNavigation = () => {
+    // Navigate back to the specific portfolio using its ID
+    navigate(`/portfolio`, { 
+      state: { 
+        activePortfolioId: Number(portfolioId),
+        // Add this to ensure the portfolio is selected
+        highlightPortfolio: true 
+      } 
+    });
+  };
+
+
   const [editingTxId, setEditingTxId] = useState(null);
   const [editFormData, setEditFormData] = useState({
     type: 'BUY',
@@ -179,117 +249,87 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
     const amount = parseFloat(editFormData.amount);
     const valueUSD = priceUSD * amount;
 
-    const updatedPortfolios = portfolios.map(p => {
-      if (p.id === parseInt(portfolioId)) {
-        const updatedAssets = p.assets.map(a => {
-          if (a.id === parseInt(assetId)) {
-            // 1. Calculate the current market price per unit BEFORE updating
-            // We use the existing total value divided by the existing amount
-            const currentUnitPrice = a.value / a.amount;
+    const editData = {
+      type: editFormData.type,
+      price: originalPrice,
+      priceUSD: priceUSD,
+      currency: editFormData.editCurrency,
+      amount: amount,
+      value: valueUSD,
+      date: editFormData.date
+    };
 
-            const newTransactions = a.transactions.map(t => 
-              t.id === transactionId ? { 
-                ...t, 
-                type: editFormData.type,
-                price: originalPrice,
-                priceUSD: priceUSD,
-                currency: editFormData.editCurrency,
-                amount: amount,
-                value: valueUSD,
-                date: editFormData.date
-              } : t
-            );
-
-            // 2. Recalculate net amount
-            const buyTxs = newTransactions.filter(t => t.type === 'BUY');
-            const sellTxs = newTransactions.filter(t => t.type === 'SELL');
-            const netAmount = buyTxs.reduce((s, t) => s + t.amount, 0) - sellTxs.reduce((s, t) => s + t.amount, 0);
+    setPortfolios(prev => prev.map(p => {
+      if (String(p.id) === String(portfolioId)) {
+        const newAssets = p.assets.map(a => {
+          if (String(a.id) === String(assetId)) {
+            // Use the existing price per unit to maintain market valuation
+            const currentPrice = a.value / a.amount; 
             
-            const totalCost = buyTxs.reduce((s, t) => s + t.value, 0);
-            const newAvgBuy = buyTxs.reduce((s, t) => s + t.amount, 0) > 0 
-              ? totalCost / buyTxs.reduce((s, t) => s + t.amount, 0) 
-              : 0;
-
-            return { 
-              ...a, 
-              amount: netAmount, 
-              avgBuy: newAvgBuy, 
-              // 3. FIX: Update the value immediately using the current price
-              value: currentUnitPrice * netAmount, 
-              transactions: newTransactions 
+            const newTxs = a.transactions.map(t => 
+                t.id === transactionId ? { ...t, ...editData } : t
+            );
+            
+            // Use your existing FIFO recalculator
+            const metrics = calculateFIFOMetrics(newTxs);
+            return {
+              ...a,
+              ...metrics,
+              value: currentPrice * metrics.amount,
+              transactions: newTxs,
+              purchaseDate: metrics.firstDate || a.purchaseDate
             };
           }
           return a;
         });
-        return { ...p, assets: updatedAssets };
+        return { ...p, assets: newAssets };
       }
       return p;
-    });
-    
-    setPortfolios(updatedPortfolios);
+    }));
     setEditingTxId(null);
   };
 
   const removeTransaction = (transactionId) => {
     if (!window.confirm('Are you sure you want to remove this transaction?')) return;
     
-    const updatedPortfolios = portfolios.map(p => {
-      if (p.id === parseInt(portfolioId)) {
-        const updatedAssets = p.assets.map(a => {
-          if (a.id === parseInt(assetId)) {
-            // Filter out the transaction
-            const updatedTransactions = a.transactions.filter(t => t.id !== transactionId);
-            
-            if (updatedTransactions.length === 0) {
-              return null;
+    setPortfolios(prev => {
+      const updated = prev.map(p => {
+        if (String(p.id) === String(portfolioId)) {
+          const newAssets = p.assets.map(a => {
+            if (String(a.id) === String(assetId)) {
+              const currentPrice = a.value / a.amount;
+              const newTxs = a.transactions.filter(t => t.id !== transactionId);
+              
+              if (newTxs.length === 0) return null;
+
+              const metrics = recalculateAssetWithFIFO(newTxs);
+              return {
+                ...a,
+                ...metrics,
+                value: currentPrice * metrics.amount,
+                transactions: newTxs,
+                purchaseDate: metrics.firstDate
+              };
             }
-            
-            // Hitung ulang metrics
-            const buyTransactions = updatedTransactions.filter(t => t.type === 'BUY');
-            const sellTransactions = updatedTransactions.filter(t => t.type === 'SELL');
-            
-            const totalBuyAmount = buyTransactions.reduce((sum, t) => sum + t.amount, 0);
-            const totalSellAmount = sellTransactions.reduce((sum, t) => sum + t.amount, 0);
-            const netAmount = totalBuyAmount - totalSellAmount;
-            
-            const totalCost = buyTransactions.reduce((sum, t) => sum + t.value, 0);
-            const avgBuy = totalBuyAmount > 0 ? totalCost / totalBuyAmount : 0;
-            
-            // Ambil harga terkini (dari aset atau harga real-time)
-            const currentPrice = a.value / a.amount;
-            
-            // Dapatkan tanggal pembelian pertama
-            const sortedDates = buyTransactions
-              .map(t => t.date)
-              .sort((a, b) => new Date(a) - new Date(b));
-            
-            return {
-              ...a,
-              amount: netAmount,
-              avgBuy: avgBuy,
-              value: currentPrice * netAmount,
-              transactions: updatedTransactions,
-              purchaseDate: sortedDates[0] || a.purchaseDate
-            };
-          }
-          return a;
-        }).filter(Boolean);
+            return a;
+          }).filter(Boolean);
+          
+          return { ...p, assets: newAssets };
+        }
+        return p;
+      });
+
+      // Check if asset still exists to determine if we should redirect
+      const assetExists = updated
+        .find(p => String(p.id) === String(portfolioId))
+        ?.assets.find(a => String(a.id) === String(assetId));
         
-        return { ...p, assets: updatedAssets };
+      if (!assetExists) {
+        navigate(`/portfolio`, { state: { activeId: portfolioId } });
       }
-      return p;
-    });
-    
-    setPortfolios(updatedPortfolios);
-    
-    // Jika asset dihapus, redirect ke portfolio
-    const updatedAsset = updatedPortfolios
-      .find(p => p.id === parseInt(portfolioId))
-      ?.assets.find(a => a.id === parseInt(assetId));
       
-    if (!updatedAsset) {
-      navigate(`/portfolio/${portfolioId}`);
-    }
+      return updated;
+    });
   };
 
   // Loading and error states
@@ -346,16 +386,18 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
   return (
     <div className="pt-10 px-8 max-w-7xl mx-auto pb-32">
       <title>History</title>
-      {/* Header Navigasi */}
+      {/* HEADER NAVIGATION SECTION - PLACE IT HERE */}
       <div className="flex items-center justify-between mb-12">
         <button
-          onClick={() => navigate(`/portfolio/${portfolioId}`)}
+          onClick={handleBackNavigation}
           className="group flex items-center gap-2 text-zinc-500 hover:text-[#D3AC2C] transition-all"
         >
           <div className="p-2 rounded-full bg-white/5 group-hover:bg-[#D3AC2C]/10">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           </div>
-          <span className="font-bold uppercase tracking-widest text-xs">Back to {portfolio.name}</span>
+          <span className="font-bold uppercase tracking-widest text-xs">
+            Back to {portfolio?.name || 'Portfolio'}
+          </span>
         </button>
       </div>
 
@@ -447,7 +489,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
           { label: 'Average Buy Price', val: formatValue(asset.avgBuy), color: 'text-white' },
           { label: 'Cost Basis', val: formatValue(costBasis), color: 'text-white' },
           { label: 'Current Price', val: formatValue(asset.value / asset.amount), color: 'text-[#D3AC2C]' },
-          { label: 'Purchase Date', val: formatDate(asset.purchaseDate), color: 'text-white' },
+          { label: 'Investing Since', val: formatDate(asset.purchaseDate), color: 'text-white' },
         ].map((stat, i) => (
           <div key={i} className="aurum-card p-6 rounded-3xl border border-white/[0.03]">
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">{stat.label}</p>
@@ -587,16 +629,47 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                       
                       {/* PRICE - Use priceUSD for conversion */}
                       <td className="py-6 text-center">
-                        <div className="flex flex-col">
-                          <span className="text-[#D3AC2C] font-semibold">
-                            {/* Pass priceUSD so formatValue converts it to localCurrency */}
-                            {formatValue(transaction.priceUSD || convertToUSD(transaction.price, transaction.currency))}
-                          </span>
-                          <span className="text-xs text-zinc-500 mt-1">
-                            {/* Show original entry as reference */}
-                            {transaction.price} {transaction.currency}
-                          </span>
-                        </div>
+                        {editingTxId === transaction.id ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                step="0.00001"
+                                className="bg-black border border-zinc-700 p-2 rounded text-sm text-white text-center w-32"
+                                value={editFormData.price}
+                                onChange={(e) => setEditFormData({...editFormData, price: e.target.value})}
+                              />
+                              <div className="relative">
+                                <select
+                                  className="bg-black border border-zinc-700 p-2 rounded text-sm text-white appearance-none pr-8"
+                                  value={editFormData.editCurrency}
+                                  onChange={(e) => setEditFormData({...editFormData, editCurrency: e.target.value})}
+                                >
+                                  {['USD', 'CAD', 'IDR'].map((curr) => (
+                                    <option key={curr} value={curr}>{curr}</option>
+                                  ))}
+                                </select>
+                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M6 9l6 6 6-6"/>
+                                  </svg>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-xs text-zinc-500">
+                              ≈ {formatValue(convertToUSD(parseFloat(editFormData.price || 0), editFormData.editCurrency), 'USD')} USD
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col">
+                            <span className="text-[#D3AC2C] font-semibold">
+                              {formatValue(transaction.priceUSD || convertToUSD(transaction.price, transaction.currency))}
+                            </span>
+                            <span className="text-xs text-zinc-500 mt-1">
+                              {transaction.price} {transaction.currency}
+                            </span>
+                          </div>
+                        )}
                       </td>
                       
                       {/* AMOUNT */}
@@ -618,18 +691,36 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                       
                       {/* TOTAL VALUE - Value is already stored in USD */}
                       <td className="py-6 text-center">
-                        <div className="flex flex-col">
-                          <span className="text-white font-bold">
-                            {formatValue(transaction.value)}
-                          </span>
-                          <span className="text-xs text-zinc-500 mt-1">
-                            ≈ {formatValue(transaction.value, 'USD')}
-                          </span>
-                        </div>
+                        {editingTxId === transaction.id ? (
+                          <div className="flex flex-col">
+                            <span className="text-white font-bold">
+                              {formatValue(
+                                convertToUSD(parseFloat(editFormData.price || 0), editFormData.editCurrency) * 
+                                parseFloat(editFormData.amount || 0)
+                              )}
+                            </span>
+                            <span className="text-xs text-zinc-500 mt-1">
+                              ≈ {formatValue(
+                                convertToUSD(parseFloat(editFormData.price || 0), editFormData.editCurrency) * 
+                                parseFloat(editFormData.amount || 0), 
+                                'USD'
+                              )}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col">
+                            <span className="text-white font-bold">
+                              {formatValue(transaction.value)}
+                            </span>
+                            <span className="text-xs text-zinc-500 mt-1">
+                              ≈ {formatValue(transaction.value, 'USD')}
+                            </span>
+                          </div>
+                        )}
                       </td>
                       
                       {/* ACTIONS */}
-<td className="py-6 text-center">
+                      <td className="py-6 text-center">
                         {editingTxId === transaction.id ? (
                           <div className="flex flex-col gap-2 items-center">
                             <div className="flex gap-2">

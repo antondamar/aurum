@@ -280,9 +280,6 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
     const calculateTypePerformance = (typeData) => ({
       totalReturn: typeData.totalCost > 0 
         ? ((typeData.totalValue - typeData.totalCost) / typeData.totalCost) * 100 
-        : 0,
-      avgReturn: typeData.assets.length > 0 
-        ? typeData.assets.reduce((sum, a) => sum + parseFloat(a.change), 0) / typeData.assets.length 
         : 0
     });
 
@@ -565,16 +562,6 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-zinc-400">Average Asset Return</span>
-              <span className={`text-lg font-bold ${
-                dashboardData.aggregatedStats.performanceByType.crypto.avgReturn >= 0 
-                  ? 'text-emerald-400' 
-                  : 'text-red-400'
-              }`}>
-                {formatPercentage(dashboardData.aggregatedStats.performanceByType.crypto.avgReturn)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
               <span className="text-zinc-400">Total Value</span>
               <span className="text-lg font-bold gold-text">
                 {formatValue(dashboardData.aggregatedStats.assetTypeBreakdown.crypto.value, currency)}
@@ -597,16 +584,6 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-zinc-400">Average Asset Return</span>
-              <span className={`text-lg font-bold ${
-                dashboardData.aggregatedStats.performanceByType.stocks.avgReturn >= 0 
-                  ? 'text-emerald-400' 
-                  : 'text-red-400'
-              }`}>
-                {formatPercentage(dashboardData.aggregatedStats.performanceByType.stocks.avgReturn)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
               <span className="text-zinc-400">Total Value</span>
               <span className="text-lg font-bold gold-text">
                 {formatValue(dashboardData.aggregatedStats.assetTypeBreakdown.stocks.value, currency)}
@@ -626,16 +603,6 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
                   : 'text-red-400'
               }`}>
                 {formatPercentage(dashboardData.aggregatedStats.performanceByType.cash.totalReturn)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-zinc-400">Average Asset Return</span>
-              <span className={`text-lg font-bold ${
-                dashboardData.aggregatedStats.performanceByType.cash.avgReturn >= 0 
-                  ? 'text-emerald-400' 
-                  : 'text-red-400'
-              }`}>
-                {formatPercentage(dashboardData.aggregatedStats.performanceByType.cash.avgReturn)}
               </span>
             </div>
             <div className="flex justify-between items-center">
