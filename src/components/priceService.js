@@ -1,5 +1,10 @@
 const BACKEND_URL = 'https://aurum-backend-tpaz.onrender.com'; 
 
+console.log('==========================================');
+console.log('🔧 BACKEND_URL is set to:', BACKEND_URL);
+console.log('🔧 Running on:', window.location.origin);
+console.log('==========================================');
+
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
 let priceCache = {};
 let lastCacheTime = {};
@@ -44,36 +49,39 @@ export const fetchBatchCryptoPrices = async (coingeckoIds) => {
 
 export const fetchStockPrice = async (symbol, currentIdrRate) => {
   try {
-    console.log(`🔍 Fetching price for: ${symbol}`);
-    
-    // ✅ CORRECT: Use path parameter instead of query parameter
     const url = `${BACKEND_URL}/get-price/${symbol}`;
-    console.log(`📡 URL: ${url}`);
+    
+    console.log('=== FETCH STOCK PRICE DEBUG ===');
+    console.log('🔍 Symbol:', symbol);
+    console.log('📡 BACKEND_URL variable:', BACKEND_URL);
+    console.log('📡 Constructed URL:', url);
+    console.log('📡 typeof url:', typeof url);
     
     const response = await fetch(url);
     
-    console.log(`📥 Response status: ${response.status}`);
+    console.log('📥 Response status:', response.status);
+    console.log('📥 Response URL (where it actually went):', response.url);
+    console.log('================================');
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Backend response: ${errorText}`);
+      console.error(`❌ Backend error response: ${errorText}`);
       throw new Error(`Backend error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log(`📊 Raw data from backend:`, data);
+    console.log(`📊 Received data:`, data);
     
     let rawPrice = data.price || 0;
 
-    // Handle Indonesia stocks (.JK)
     if (symbol.includes('.JK')) {
       const idrRate = currentIdrRate || 15600;
       console.log(`Converting ${symbol}: ${rawPrice} IDR ÷ ${idrRate} = ${rawPrice / idrRate} USD`);
       return rawPrice / idrRate; 
     }
-    return rawPrice; // US stocks are already in USD
+    return rawPrice;
   } catch (error) {
-    console.error("❌ Error fetching from Render Backend:", error);
+    console.error("❌ Full error object:", error);
     return 0;
   }
 };
