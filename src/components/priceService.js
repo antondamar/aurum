@@ -48,29 +48,29 @@ export const fetchBatchCryptoPrices = async (coingeckoIds) => {
 };
 
 export const fetchStockPrice = async (symbol, currentIdrRate) => {
+  console.log('🚀 fetchStockPrice CALLED');
+  console.log('🚀 Symbol:', symbol);
+  console.log('🚀 BACKEND_URL:', BACKEND_URL);
+  
   try {
     const url = `${BACKEND_URL}/get-price/${symbol}`;
     
-    console.log('=== FETCH STOCK PRICE DEBUG ===');
-    console.log('🔍 Symbol:', symbol);
-    console.log('📡 BACKEND_URL variable:', BACKEND_URL);
-    console.log('📡 Constructed URL:', url);
-    console.log('📡 typeof url:', typeof url);
+    console.log('=== STOCK PRICE FETCH DEBUG ===');
+    console.log('📡 Full URL:', url);
     
     const response = await fetch(url);
     
     console.log('📥 Response status:', response.status);
-    console.log('📥 Response URL (where it actually went):', response.url);
-    console.log('================================');
+    console.log('📥 Response went to:', response.url);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Backend error response: ${errorText}`);
-      throw new Error(`Backend error: ${response.status} - ${errorText}`);
+      console.error('❌ Error response:', errorText);
+      throw new Error(`Backend error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log(`📊 Received data:`, data);
+    console.log('📊 Data received:', data);
     
     let rawPrice = data.price || 0;
 
@@ -81,7 +81,8 @@ export const fetchStockPrice = async (symbol, currentIdrRate) => {
     }
     return rawPrice;
   } catch (error) {
-    console.error("❌ Full error object:", error);
+    console.error('❌ fetchStockPrice ERROR:', error);
+    console.error('❌ Error message:', error.message);
     return 0;
   }
 };
