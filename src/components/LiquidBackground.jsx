@@ -3,50 +3,34 @@ import React from 'react';
 const LiquidBackground = () => {
   return (
     <div className="fixed inset-0 z-0 bg-[#010203] overflow-hidden pointer-events-none">
-      {/* 1. Subtle Radial Glow (The "Aura") */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#D3AC2C]/10 blur-[120px] animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#D3AC2C]/5 blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
-
-      {/* 2. Luxury Mesh Grid Overlay */}
-      <div 
-        className="absolute inset-0 opacity-[0.03]" 
-        style={{ 
-          backgroundImage: `linear-gradient(#D3AC2C 1px, transparent 1px), linear-gradient(90deg, #D3AC2C 1px, transparent 1px)`,
-          backgroundSize: '60px 60px'
-        }}
-      />
-
-      {/* 3. Floating "Gold Dust" Particles */}
-      <div className="absolute inset-0">
-        {[...Array(15)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full bg-gradient-to-br from-[#D3AC2C] to-[#A57A03] opacity-20 blur-[1px]"
-            style={{
-              width: Math.random() * 4 + 2 + 'px',
-              height: Math.random() * 4 + 2 + 'px',
-              top: Math.random() * 100 + '%',
-              left: Math.random() * 100 + '%',
-              animation: `float ${Math.random() * 10 + 10}s linear infinite`,
-              animationDelay: `-${Math.random() * 10}s`
-            }}
-          />
-        ))}
-      </div>
-
-      {/* 4. Deep Vignette */}
-      <div className="absolute inset-0 bg-radial-vignette shadow-[inset_0_0_200px_rgba(0,0,0,0.9)]" />
-
-      {/* Custom Keyframe Styles */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes float {
-          0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }
-          10% { opacity: 0.3; }
-          90% { opacity: 0.3; }
-          100% { transform: translateY(-100vh) translateX(20px) rotate(360deg); opacity: 0; }
-        }
-      `}} />
+    <div className="absolute inset-0">
+      {[...Array(20)].map((_, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            width: `${Math.random() * 200 + 100}px`,
+            height: `${Math.random() * 200 + 100}px`,
+            background: `radial-gradient(circle, rgba(211, 172, 44, ${Math.random() * 0.4 + 0.3}) 0%, rgba(211, 172, 44, 0.1) 50%, transparent 70%)`,
+            top: `${Math.random() * 100}%`,
+            left: `${Math.random() * 100}%`,
+            filter: 'blur(30px)',
+            animation: `bokeh ${Math.random() * 20 + 15}s ease-in-out infinite`,
+            animationDelay: `-${Math.random() * 10}s`
+          }}
+        />
+      ))}
     </div>
+    <style dangerouslySetInnerHTML={{ __html: `
+      @keyframes bokeh {
+        0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+        25% { transform: translate(50px, -30px) scale(1.3); opacity: 0.9; }
+        50% { transform: translate(-30px, 50px) scale(0.9); opacity: 0.7; }
+        75% { transform: translate(40px, 40px) scale(1.2); opacity: 0.8; }
+        100% { transform: translate(0px, 0px) scale(1); opacity: 0.6; }
+      }
+    `}} />
+  </div>
   );
 };
 

@@ -38,13 +38,14 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState(localStorage.getItem('currentView') || 'Home');
-
+  
   // --- DATA STATE ---
   const [assetMasterList, setAssetMasterList] = useState([]);
   const [portfolios, setPortfolios] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   const [profileData, setProfileData] = useState({ username: '', firstName: '', lastName: '' });
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
 
   useEffect(() => {
   const fetchInitialRates = async () => {

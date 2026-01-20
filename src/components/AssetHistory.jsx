@@ -302,7 +302,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
               
               if (newTxs.length === 0) return null;
 
-              const metrics = recalculateAssetWithFIFO(newTxs);
+              const metrics = calculateFIFOMetrics(newTxs);
               return {
                 ...a,
                 ...metrics,
@@ -666,7 +666,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                               {formatValue(transaction.priceUSD || convertToUSD(transaction.price, transaction.currency))}
                             </span>
                             <span className="text-xs text-zinc-500 mt-1">
-                              {transaction.price} {transaction.currency}
+                              bought at {transaction.priceUSD} {transaction.currency}
                             </span>
                           </div>
                         )}

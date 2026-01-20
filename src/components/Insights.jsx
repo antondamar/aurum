@@ -198,7 +198,7 @@ const Insights = () => {
                 
                 <div className="flex items-baseline gap-2">
                   <span className="text-white font-bold text-lg">
-                    {result.technical_summary?.volume?.last_period?.toLocaleString() || '0'}
+                    ${result.technical_summary?.volume?.last_period?.toLocaleString() || '0'}
                   </span>
                   <span className="text-zinc-600 text-[10px] uppercase">
                     {result.analysis_metadata?.interval}
@@ -211,7 +211,7 @@ const Insights = () => {
                       {result.technical_summary?.volume?.average_label || 'Average'}
                     </span>
                     <span className="text-zinc-400 text-xs font-medium">
-                      {result.technical_summary?.volume?.average?.toLocaleString() || '0'}
+                      ${result.technical_summary?.volume?.average?.toLocaleString() || '0'}
                     </span>
                   </div>
                 </div>
@@ -397,7 +397,7 @@ const Insights = () => {
                         {result.technical_summary?.volume?.period_label}
                       </div>
                       <div className="text-white font-bold text-lg">
-                        {(result.technical_summary?.volume?.last_period / 1000000).toFixed(2)}M
+                        {(result.technical_summary?.volume_period / 1000000).toFixed(2)}M
                       </div>
                       <div className={`text-[10px] font-bold mt-1 ${
                         result.technical_summary?.volume?.vs_average === 'Above Average'

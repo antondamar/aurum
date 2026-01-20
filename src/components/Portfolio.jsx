@@ -30,14 +30,21 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
   const [priceUpdateTime, setPriceUpdateTime] = useState(null);
 
   const [portfolioSettings, setPortfolioSettings] = useState({});
+  const [currentRates, setCurrentRates] = useState(rates);
   const location = useLocation();
+
   const calculateFIFOMetrics = useCallback((transactions) => {
-    if (!transactions || transactions.length === 0) return { costBasis: 0, amount: 0, realizedPnL: 0 };
+    if (!transactions || transactions.length === 0) {
+      return { costBasis: 0, amount: 0, realizedPnL: 0, firstDate: null };
+    }
 
     // Sort transactions by date (oldest first)
     const sortedTxs = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
     
-    let buyLots = []; // To track remaining quantities of each buy
+    // Capture the first purchase date
+    const firstPurchaseDate = sortedTxs.find(tx => tx.type === 'BUY')?.date || null;
+    
+    let buyLots = [];
     let totalRealizedPnL = 0;
 
     sortedTxs.forEach(tx => {
@@ -45,17 +52,16 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         buyLots.push({
           remainingAmount: tx.amount,
           priceUSD: tx.priceUSD,
-          originalAmount: tx.amount // Keep track of original for reference
+          originalAmount: tx.amount
         });
       } else if (tx.type === 'SELL') {
         let amountToSell = tx.amount;
-        const sellValueUSD = tx.value; // This should be priceUSD * amount
+        const sellValueUSD = tx.value;
         
         while (amountToSell > 0 && buyLots.length > 0) {
           const lot = buyLots[0];
           const sellFromThisLot = Math.min(amountToSell, lot.remainingAmount);
           
-          // Calculate PnL for this portion
           const costOfThisPortion = sellFromThisLot * lot.priceUSD;
           const proceedsOfThisPortion = (sellValueUSD / tx.amount) * sellFromThisLot;
           totalRealizedPnL += (proceedsOfThisPortion - costOfThisPortion);
@@ -68,14 +74,14 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
       }
     });
 
-    // The cost basis of REMAINING holdings is the sum of (remaining amount * original buy price)
     const remainingCostBasis = buyLots.reduce((sum, lot) => sum + (lot.remainingAmount * lot.priceUSD), 0);
     const remainingAmount = buyLots.reduce((sum, lot) => sum + lot.remainingAmount, 0);
 
     return { 
       costBasis: remainingCostBasis, 
       amount: remainingAmount, 
-      realizedPnL: totalRealizedPnL 
+      realizedPnL: totalRealizedPnL,
+      firstDate: firstPurchaseDate  // ✅ ADD THIS
     };
   }, []);
 
@@ -198,8 +204,29 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
       return exactMatch;
     }
     
-    // Priority 4: Case-insensitive partial match
+    // Priority 4: Case-insensitive match (for tickers like "BBCA")
     const lowerCleanName = cleanName.toLowerCase();
+    
+    // Try matching against name first
+    const nameMatch = ASSET_LIBRARY.find(a => 
+      a.name.toLowerCase() === lowerCleanName
+    );
+    if (nameMatch) {
+      console.log(`✅ Name match found: ${nameMatch.name}`);
+      return nameMatch;
+    }
+    
+    // Try matching against symbol (for cases like "AAPL" → finds Apple)
+    const symbolMatch2 = ASSET_LIBRARY.find(a => 
+      a.symbol.toLowerCase() === lowerCleanName ||
+      a.symbol.toLowerCase().startsWith(lowerCleanName + '.')  // Match "BBCA" to "BBCA.JK"
+    );
+    if (symbolMatch2) {
+      console.log(`✅ Symbol match found: ${symbolMatch2.name} (${symbolMatch2.symbol})`);
+      return symbolMatch2;
+    }
+    
+    // Priority 5: Partial match as fallback
     const partialMatch = ASSET_LIBRARY.find(a => 
       a.name.toLowerCase().includes(lowerCleanName) ||
       lowerCleanName.includes(a.name.toLowerCase())
@@ -245,16 +272,16 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
     
     setIsUpdatingPrices(true);
     try {
-      // Fetch fresh exchange rates EVERY TIME
       let freshRates = {};
       try {
         const ratesResponse = await fetch('https://open.er-api.com/v6/latest/USD');
         const ratesData = await ratesResponse.json();
         freshRates = ratesData.rates || {};
+        setCurrentRates(freshRates); // ✅ Update state with fresh rates
         console.log('💱 Fresh exchange rates fetched:', freshRates);
       } catch (rateError) {
         console.error('Error fetching exchange rates:', rateError);
-        freshRates = rates; // Fall back to existing rates
+        freshRates = currentRates; // Use existing rates
       }
 
       const cryptoAssets = activePortfolio.assets.filter(asset => {
@@ -304,13 +331,13 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
             console.log(`📊 Fetching stock price for ${asset.name} (${info.symbol})...`);
             
             // Use fresh IDR rate if available, otherwise fallback
-            const idrRate = freshRates?.IDR || rates?.IDR || 15600;
-            const price = await fetchStockPrice(info.symbol, idrRate);
+            const idrRate = freshRates?.IDR || currentRates?.IDR || 15600;
+            const priceInUSD = await fetchStockPrice(info.symbol, idrRate);
             
-            console.log(`💰 Got price in USD for ${asset.name}: ${price}`);
+            console.log(`💰 Got price in USD for ${asset.name}: ${priceInUSD}`);
             
-            if (price > 0) {
-              return { assetName: asset.name, price };
+            if (priceInUSD > 0) {
+              return { assetName: asset.name, price: priceInUSD };
             } else {
               const fallbackPrice = asset.value / asset.amount;
               console.log(`Using fallback price: ${fallbackPrice}`);
@@ -484,7 +511,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
   }, [activePortfolio]);
 
   const formatValue = useCallback((val, curr) => {
-    const converted = val * (rates[curr] || 1);
+    const converted = val * (currentRates[curr] || 1);
     const noDecimalCurrencies = ['IDR', 'JPY'];
 
     if (noDecimalCurrencies.includes(curr)) {
@@ -507,7 +534,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         maximumFractionDigits: decimals
       }).format(converted);
     }
-  }, [rates, getLocale]);
+  }, [currentRates, getLocale]);
 
   const formatPercentage = useCallback((val) => {
     return new Intl.NumberFormat('en-US', {

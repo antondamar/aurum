@@ -1,6 +1,3 @@
-// priceService.js
-
-// IMPORTANT: Replace this with your actual Render URL (e.g., https://aurum-backend.onrender.com)
 const BACKEND_URL = 'https://aurum-backend-tpaz.onrender.com'; 
 
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
@@ -45,28 +42,38 @@ export const fetchBatchCryptoPrices = async (coingeckoIds) => {
   }
 };
 
-// --- UPDATED STOCK LOGIC (Now using your Live Render Backend) ---
 export const fetchStockPrice = async (symbol, currentIdrRate) => {
   try {
-    // Calling your Python app.py hosted on Render
-    const response = await fetch(`${BACKEND_URL}/get-price?symbol=${symbol}`);
+    console.log(`🔍 Fetching price for: ${symbol}`);
+    
+    // ✅ CORRECT: Use path parameter instead of query parameter
+    const url = `${BACKEND_URL}/get-price/${symbol}`;
+    console.log(`📡 URL: ${url}`);
+    
+    const response = await fetch(url);
+    
+    console.log(`📥 Response status: ${response.status}`);
     
     if (!response.ok) {
-      throw new Error(`Backend error: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`❌ Backend response: ${errorText}`);
+      throw new Error(`Backend error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log(`📊 Raw data from backend:`, data);
+    
     let rawPrice = data.price || 0;
 
     // Handle Indonesia stocks (.JK)
     if (symbol.includes('.JK')) {
-      // yfinance returns IDR for .JK stocks; convert to USD for database consistency
-      // Using a fallback of 15600 if currentIdrRate is missing
-      return rawPrice / (currentIdrRate || 15600); 
+      const idrRate = currentIdrRate || 15600;
+      console.log(`Converting ${symbol}: ${rawPrice} IDR ÷ ${idrRate} = ${rawPrice / idrRate} USD`);
+      return rawPrice / idrRate; 
     }
-    return rawPrice;
+    return rawPrice; // US stocks are already in USD
   } catch (error) {
-    console.error("Error fetching from Render Backend:", error);
+    console.error("❌ Error fetching from Render Backend:", error);
     return 0;
   }
 };
