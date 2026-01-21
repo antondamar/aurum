@@ -391,13 +391,13 @@ const Insights = () => {
                     Volume Analysis
                   </h3>
                   
-                  <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="grid grid-cols-1 gap-4 mb-4">
                     <div className="bg-black/40 p-4 rounded-xl">
                       <div className="text-zinc-500 text-[9px] uppercase mb-2">
                         {result.technical_summary?.volume?.period_label}
                       </div>
                       <div className="text-white font-bold text-lg">
-                        {(result.technical_summary?.volume_period / 1000000).toFixed(2)}M
+                        ${result.technical_summary?.volume?.last_period?.toLocaleString() || '0'}
                       </div>
                       <div className={`text-[10px] font-bold mt-1 ${
                         result.technical_summary?.volume?.vs_average === 'Above Average'
@@ -413,7 +413,7 @@ const Insights = () => {
                         {result.technical_summary?.volume?.average_label}
                       </div>
                       <div className="text-white font-bold text-lg">
-                        {(result.technical_summary?.volume?.average / 1000000).toFixed(2)}M
+                        ${result.technical_summary?.volume?.average?.toLocaleString() || '0'}
                       </div>
                       <div className="text-zinc-500 text-[10px] font-bold mt-1">
                         {result.technical_summary?.volume?.change_pct > 0 ? '+' : ''}
