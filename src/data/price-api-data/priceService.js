@@ -49,10 +49,12 @@ export const fetchBatchCryptoPrices = async (coingeckoIds) => {
 
 export const fetchStockPrice = async (symbol, exchange = 'US') => {
   try {
-    // Ensure Indonesian symbols sent to the backend have .JK if needed
-    const cleanSymbol = (exchange === 'IDX' && !symbol.includes('.JK')) 
-      ? `${symbol}.JK` 
-      : symbol;
+    // If the symbol is "BBCA.JK" and exchange is "IDX", 
+    // don't append another ".JK"
+    let cleanSymbol = symbol.toUpperCase();
+    if (exchange === 'IDX' && !cleanSymbol.endsWith('.JK')) {
+      cleanSymbol = `${cleanSymbol}.JK`;
+    }
 
     const response = await fetch(`${BACKEND_URL}/get-price/${cleanSymbol}`);
     const data = await response.json();

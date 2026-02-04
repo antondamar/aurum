@@ -43,9 +43,12 @@ export const updateAllPrices = async (assets, rates) => {
   if (stockAssets.length > 0) {
     await Promise.all(stockAssets.map(async (asset) => {
       try {
-        // ✅ FIX: Detect exchange type based on symbol format
+        // Determine exchange just for logging/logic if needed
         const exchange = asset.symbol.includes('.JK') ? 'IDX' : 'US';
+        
+        // Pass the symbol EXACTLY as it is in your library (e.g., "BBCA.JK")
         const price = await fetchStockPrice(asset.symbol, exchange);
+        
         if (price > 0) newPrices[asset.name] = price;
       } catch (err) {
         console.error(`Failed to fetch ${asset.name}`, err);
