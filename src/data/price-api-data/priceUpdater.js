@@ -41,10 +41,11 @@ export const updateAllPrices = async (assets, rates) => {
 
   // 3. Fetch Stocks Individually
   if (stockAssets.length > 0) {
-    const idrRate = rates?.IDR || 15600;
     await Promise.all(stockAssets.map(async (asset) => {
       try {
-        const price = await fetchStockPrice(asset.symbol, idrRate);
+        // ✅ FIX: Detect exchange type based on symbol format
+        const exchange = asset.symbol.includes('.JK') ? 'IDX' : 'US';
+        const price = await fetchStockPrice(asset.symbol, exchange);
         if (price > 0) newPrices[asset.name] = price;
       } catch (err) {
         console.error(`Failed to fetch ${asset.name}`, err);
