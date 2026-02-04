@@ -1,3 +1,5 @@
+const BACKEND_URL = 'https://aurum-backend-tpaz.onrender.com'; 
+
 export const calculateTotalCostBasis = async (buyLots, targetCurrency = 'USD') => {
   if (!buyLots || buyLots.length === 0) return 0;
 

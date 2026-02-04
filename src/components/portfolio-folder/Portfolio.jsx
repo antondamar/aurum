@@ -58,30 +58,32 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
     }
   };
 
-  const updateAllPrices = async () => {
+  const handlePriceUpdate = async () => {
     if (activePortfolio.assets.length === 0) return;
     
     setIsUpdatingPrices(true);
     try {
-      // Call the centralized utility
+      // Now this correctly calls the utility imported from priceUpdater.js
       const newPrices = await updateAllPrices(activePortfolio.assets, currentRates);
       
       setRealTimePrices(newPrices);
       setPriceUpdateTime(new Date().toLocaleTimeString());
 
-      // Update the portfolio values in the state
       setPortfolios(prev => prev.map(p => {
         if (p.id === activePortfolioId) {
           return {
             ...p,
             assets: p.assets.map(a => ({
               ...a,
+              // Calculate new value based on fresh price
               value: (newPrices[a.name] || (a.value / a.amount)) * a.amount
             }))
           };
         }
         return p;
       }));
+    } catch (error) {
+      console.error("Failed to sync prices:", error);
     } finally {
       setIsUpdatingPrices(false);
     }
@@ -154,11 +156,11 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
   }, [assetSearchQuery]);
 
   
-  // Auto-update prices every 30 seconds
+  // Auto-update prices
   useEffect(() => {
     if (activePortfolio.assets.length > 0) {
-      updateAllPrices();
-      const interval = setInterval(updateAllPrices, 30000);
+      handlePriceUpdate(); // Use the new name
+      const interval = setInterval(handlePriceUpdate, 30000); // Use the new name
       return () => clearInterval(interval);
     }
   }, [activePortfolio.assets.length, activePortfolioId]);
@@ -571,7 +573,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
       {/* PRICE UPDATE STATUS BAR */}
       <UpdatePrice 
         priceUpdateTime={priceUpdateTime}
-        updateAllPrices={updateAllPrices}
+        updateAllPrices={handlePriceUpdate}
         isUpdatingPrices={isUpdatingPrices}
         assetCount={activePortfolio.assets.length}
       />
