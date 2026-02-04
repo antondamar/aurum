@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { ASSET_LIBRARY } from './assetLibrary';
+import { ASSET_LIBRARY } from '../../data/assets-data/assetLibrary';
 
 const Insights = () => {
   const { symbol: paramSymbol } = useParams();

@@ -72,20 +72,26 @@ export default function Navbar({ setView, currentView, profileData }) {
 
       {/* navigation bar */}
       <div className="flex gap-10 absolute left-1/2 -translate-x-1/2">
-        {navItems.map((item) => (
-          <button
-            key={item}
-            onClick={() => {
-              setView(item);
-              navigate('/'); 
-            }}
-            className={`text-[13px] font-medium transition-colors duration-200 ${
-              currentView === item ? 'text-white' : 'text-zinc-500 hover:text-white'
-            }`}
-          >
-            {item}
-          </button>
-        ))}
+        {navItems.map((item) => {
+          // Check if the item should be highlighted
+          // It's active if it matches exactly, OR if the item is 'Tools' and we are inside a sub-tool
+          const isActive = currentView === item || (item === 'Tools' && currentView?.startsWith('Tool_'));
+
+          return (
+            <button
+              key={item}
+              onClick={() => {
+                setView(item);
+                navigate('/'); 
+              }}
+              className={`text-[13px] font-medium transition-colors duration-200 ${
+                isActive ? 'text-white' : 'text-zinc-500 hover:text-white'
+              }`}
+            >
+              {item}
+            </button>
+          );
+        })}
       </div>
 
       {/* profile button dengan dropdown */}

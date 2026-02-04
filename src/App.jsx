@@ -6,18 +6,19 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 // Komponen Pendukung
 import Navbar from './components/Navbar';
-import Dashboard from './components/Dashboard';
-import LiquidBackground from './components/LiquidBackground';
-import Portfolio from './components/Portfolio';
-import AssetHistory from './components/AssetHistory';
-import Auth from './components/Auth'; 
-import Profile from './components/Profile';
+import Dashboard from './components/home-folder/Dashboard';
+import LiquidBackground from './components/MovingBackground';
+import Portfolio from './components/portfolio-folder/Portfolio';
+import AssetHistory from './components/portfolio-folder/AssetHistory';
+import Auth from './components/account-folder/Auth'; 
+import Profile from './components/account-folder/Profile';
 import ScrollToTop from './components/ScrollToTop';
-import ProfileUpdateAlert from './components/ProfileUpdateAlert';
-import ToolsGrid from './components/tools/ToolsGrid';
-import GoalPriceTool from './components/tools/GoalPriceTool'
-import AllocationPlanner from './components/tools/AllocationPlanner'
-import Insights from './components/Insights';
+import ProfileUpdateAlert from './components/account-folder/ProfileUpdateAlert';
+import ToolsGrid from './components/tools-folder/ToolsGrid';
+import GoalPriceTool from './components/tools-folder/GoalPriceTool'
+import AllocationPlanner from './components/tools-folder/AllocationPlanner'
+import Insights from './components/insights-folder/Insights';
+import RiskAssessmentTool from './components/tools-folder/RiskAssessmentTool';
 
 // Komponen Footer
 const Footer = () => {
@@ -353,6 +354,7 @@ function App() {
                           setView={setCurrentView} 
                         />}
                         {currentView === 'Tool_rebalance' && <AllocationPlanner portfolios={portfolios} rates={rates} currency={currency} setView={setCurrentView} />}
+                        {currentView === 'Tool_risk' && <RiskAssessmentTool portfolios={portfolios} />}
                       </div>
                 ) : currentView === 'Insights' ? (
                     <Insights 

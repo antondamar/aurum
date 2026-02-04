@@ -6,6 +6,8 @@ console.log('🔧 Running on:', window.location.origin);
 console.log('==========================================');
 
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
+const POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
+const GOAPI_API_KEY = os.getenv("GOAPI_API_KEY")
 let priceCache = {};
 let lastCacheTime = {};
 
@@ -47,42 +49,19 @@ export const fetchBatchCryptoPrices = async (coingeckoIds) => {
   }
 };
 
-export const fetchStockPrice = async (symbol, currentIdrRate) => {
-  console.log('🚀 fetchStockPrice CALLED');
-  console.log('🚀 Symbol:', symbol);
-  console.log('🚀 BACKEND_URL:', BACKEND_URL);
-  
+export const fetchStockPrice = async (symbol, exchange = 'US') => {
   try {
-    const url = `${BACKEND_URL}/get-price/${symbol}`;
-    
-    console.log('=== STOCK PRICE FETCH DEBUG ===');
-    console.log('📡 Full URL:', url);
-    
-    const response = await fetch(url);
-    
-    console.log('📥 Response status:', response.status);
-    console.log('📥 Response went to:', response.url);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Error response:', errorText);
-      throw new Error(`Backend error: ${response.status}`);
-    }
+    // Ensure Indonesian symbols sent to the backend have .JK if needed
+    const cleanSymbol = (exchange === 'IDX' && !symbol.includes('.JK')) 
+      ? `${symbol}.JK` 
+      : symbol;
 
+    const response = await fetch(`${BACKEND_URL}/get-price/${cleanSymbol}`);
     const data = await response.json();
-    console.log('📊 Data received:', data);
-    
-    let rawPrice = data.price || 0;
 
-    if (symbol.includes('.JK')) {
-      const idrRate = currentIdrRate || 15600;
-      console.log(`Converting ${symbol}: ${rawPrice} IDR ÷ ${idrRate} = ${rawPrice / idrRate} USD`);
-      return rawPrice / idrRate; 
-    }
-    return rawPrice;
+    return response.ok ? data.price : 0;
   } catch (error) {
-    console.error('❌ fetchStockPrice ERROR:', error);
-    console.error('❌ Error message:', error.message);
+    console.error("Price fetch error:", error);
     return 0;
   }
 };

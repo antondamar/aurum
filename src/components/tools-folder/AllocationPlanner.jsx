@@ -1,6 +1,6 @@
-// src/components/tools/AllocationPlanner.jsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { motion } from 'framer-motion'; // Ensure motion is imported for the slider effect
+import { motion } from 'framer-motion';
+import IncreaseDecrease from '../ui-button-folder/IncreaseDecrease';
 
 const AllocationPlanner = ({ portfolios, rates, currency, setView }) => {
   const [targets, setTargets] = useState({});
@@ -161,35 +161,15 @@ const AllocationPlanner = ({ portfolios, rates, currency, setView }) => {
                   <td className="py-6 text-center text-zinc-400 font-bold tabular-nums">
                     {item.currentPct.toFixed(1)}%
                   </td>
+                  
                   <td className="py-6 text-center">
-                    <div className="inline-flex items-center bg-black/50 border border-zinc-800 rounded-xl px-4 py-1">
-                        <div className="flex items-center justify-center gap-2">
-                        {/* SUBTRACT BUTTON */}
-                        <button 
-                            onClick={() => setTargets({...targets, [item.name]: Math.max(0, (parseFloat(targets[item.name]) || 0) - 1)})}
-                            className="w-6 h-6 rounded-md bg-zinc-800 text-white flex items-center justify-center hover:bg-red-500/20 transition-all"
-                        >
-                            -
-                        </button>
-
-                        <input 
-                            type="number"
-                            value={targets[item.name] || ''}
-                            className="bg-transparent w-10 text-[#D3AC2C] font-black text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            onChange={(e) => setTargets({...targets, [item.name]: e.target.value})}
-                        />
-
-                        {/* ADD BUTTON */}
-                        <button 
-                            onClick={() => setTargets({...targets, [item.name]: (parseFloat(targets[item.name]) || 0) + 1})}
-                            className="w-6 h-6 rounded-md bg-zinc-800 text-white flex items-center justify-center hover:bg-green-500/20 transition-all"
-                        >
-                            +
-                        </button>
-                        </div>
-                       <span className="text-white text-[15px] font-bold pl-4">%</span>
-                    </div>
+                    <IncreaseDecrease 
+                      itemName={item.name} 
+                      targetValue={targets[item.name]} 
+                      setTargets={setTargets} 
+                    />
                   </td>
+
                   <td className="py-6 text-right">
                     {targets[item.name] ? (
                       <div className="flex flex-col items-end">

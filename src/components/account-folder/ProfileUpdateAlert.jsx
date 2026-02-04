@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { onSnapshot, doc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { auth, db } from '../../firebase';
 
 const ProfileUpdateAlert = () => {
   const [showAlert, setShowAlert] = useState(false);

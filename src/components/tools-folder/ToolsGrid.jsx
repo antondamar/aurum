@@ -3,6 +3,7 @@ import React from 'react';
 const tools = [
   { id: 'goal', title: 'Goal Price', desc: "See your portfolio value at different prices." },
   { id: 'rebalance', title: 'Allocation Planner', desc: 'Rebalance your portfolio to target %.' },
+  { id: 'risk', title: 'Risk Profile', desc: 'Know yourself before investing.' },
 //   { id: 'mcap', title: 'Market Cap Compare', desc: 'Compare asset prices by market cap.' },
 //   { id: 'fire', title: 'FIRE Calculator', desc: 'Estimate your retirement timeline.' },
 //   { id: 'fees', title: 'Fee & Tax Impact', desc: 'See how much fees affect your gains.' },

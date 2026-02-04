@@ -1,69 +1,13 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ASSET_LIBRARY } from './assetLibrary';
+import { ASSET_LIBRARY } from '../../data/assets-data/assetLibrary';
+import IncreaseDecrease from '../ui-button-folder/IncreaseDecrease';
+import { calculateFIFOMetrics } from '../../data/algo-data/FIFO'
 
 const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates }) => {
   const { portfolioId, assetId } = useParams();
   const navigate = useNavigate();
-
-  const calculateFIFOMetrics = useCallback((transactions) => {
-    if (!transactions || transactions.length === 0) return { 
-      costBasis: 0, 
-      amount: 0, 
-      realizedPnL: 0,
-      firstDate: null 
-    };
-
-    // Sort transactions by date (oldest first)
-    const sortedTxs = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    let buyLots = [];
-    let totalRealizedPnL = 0;
-    let firstBuyDate = null;
-
-    sortedTxs.forEach(tx => {
-      if (tx.type === 'BUY') {
-        buyLots.push({
-          remainingAmount: tx.amount,
-          priceUSD: tx.priceUSD,
-          originalAmount: tx.amount
-        });
-        
-        // Track first buy date
-        if (!firstBuyDate || new Date(tx.date) < new Date(firstBuyDate)) {
-          firstBuyDate = tx.date;
-        }
-      } else if (tx.type === 'SELL') {
-        let amountToSell = tx.amount;
-        const sellValueUSD = tx.value;
-        
-        while (amountToSell > 0 && buyLots.length > 0) {
-          const lot = buyLots[0];
-          const sellFromThisLot = Math.min(amountToSell, lot.remainingAmount);
-          
-          const costOfThisPortion = sellFromThisLot * lot.priceUSD;
-          const proceedsOfThisPortion = (sellValueUSD / tx.amount) * sellFromThisLot;
-          totalRealizedPnL += (proceedsOfThisPortion - costOfThisPortion);
-          
-          lot.remainingAmount -= sellFromThisLot;
-          amountToSell -= sellFromThisLot;
-
-          if (lot.remainingAmount <= 0) buyLots.shift();
-        }
-      }
-    });
-
-    const remainingCostBasis = buyLots.reduce((sum, lot) => sum + (lot.remainingAmount * lot.priceUSD), 0);
-    const remainingAmount = buyLots.reduce((sum, lot) => sum + lot.remainingAmount, 0);
-
-    return { 
-      costBasis: remainingCostBasis, 
-      amount: remainingAmount, 
-      realizedPnL: totalRealizedPnL,
-      firstDate: firstBuyDate
-    };
-  }, []);
 
   const handleBackNavigation = () => {
     // Navigate back to the specific portfolio using its ID
@@ -473,7 +417,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                 </span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                <span className="text-zinc-400 text-sm">First Purchase:</span>
+                <span className="text-zinc-400 text-sm">Holding Since</span>
                 <span className="text-white text-sm">
                   {formatDate(asset.purchaseDate)}
                 </span>
@@ -627,17 +571,15 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                         )}
                       </td>
                       
-                      {/* PRICE - Use priceUSD for conversion */}
+                      {/* PRICE - Dynamic View Price over Original Purchase Price */}
                       <td className="py-6 text-center">
                         {editingTxId === transaction.id ? (
                           <div className="flex flex-col items-center gap-2">
                             <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.00001"
-                                className="bg-black border border-zinc-700 p-2 rounded text-sm text-white text-center w-32"
+                              <IncreaseDecrease 
                                 value={editFormData.price}
-                                onChange={(e) => setEditFormData({...editFormData, price: e.target.value})}
+                                setter={(newVal) => setEditFormData({...editFormData, price: newVal})}
+                                step={editFormData.editCurrency === 'IDR' ? 1000 : 0.01}
                               />
                               <div className="relative">
                                 <select
@@ -656,17 +598,22 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                                 </div>
                               </div>
                             </div>
-                            <div className="text-xs text-zinc-500">
-                              ≈ {formatValue(convertToUSD(parseFloat(editFormData.price || 0), editFormData.editCurrency), 'USD')} USD
-                            </div>
                           </div>
                         ) : (
                           <div className="flex flex-col">
+                            {/* 1. Dynamic Top Value: Responds to the USD/CAD/IDR Switcher */}
                             <span className="text-[#D3AC2C] font-semibold">
-                              {formatValue(transaction.priceUSD || convertToUSD(transaction.price, transaction.currency))}
+                              {formatValue(transaction.priceUSD)}
                             </span>
+                            
+                            {/* 2. Static Bottom Value: Uses the currency registered in the transaction */}
                             <span className="text-xs text-zinc-500 mt-1">
-                              bought at {transaction.priceUSD} {transaction.currency}
+                              bought at {new Intl.NumberFormat(transaction.currency === 'IDR' ? 'id-ID' : 'en-US', {
+                                style: 'currency',
+                                currency: transaction.currency || 'USD', // Fallback to USD if undefined to prevent crash
+                                minimumFractionDigits: transaction.currency === 'IDR' ? 0 : 2,
+                                maximumFractionDigits: transaction.currency === 'IDR' ? 0 : 5
+                              }).format(transaction.price)}
                             </span>
                           </div>
                         )}
@@ -699,21 +646,11 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                                 parseFloat(editFormData.amount || 0)
                               )}
                             </span>
-                            <span className="text-xs text-zinc-500 mt-1">
-                              ≈ {formatValue(
-                                convertToUSD(parseFloat(editFormData.price || 0), editFormData.editCurrency) * 
-                                parseFloat(editFormData.amount || 0), 
-                                'USD'
-                              )}
-                            </span>
                           </div>
                         ) : (
                           <div className="flex flex-col">
                             <span className="text-white font-bold">
                               {formatValue(transaction.value)}
-                            </span>
-                            <span className="text-xs text-zinc-500 mt-1">
-                              ≈ {formatValue(transaction.value, 'USD')}
                             </span>
                           </div>
                         )}

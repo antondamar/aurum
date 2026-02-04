@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { doc, setDoc, collection, query, where, getDocs, onSnapshot, getDoc } from 'firebase/firestore'; 
-import { auth, db } from '../firebase'; 
+import { auth, db } from '../../firebase'; 
 
 const Profile = ({ profileData, setProfileData }) => {
   const [formData, setFormData] = useState(profileData);
