@@ -6,8 +6,6 @@ console.log('🔧 Running on:', window.location.origin);
 console.log('==========================================');
 
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
-const POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
-const GOAPI_API_KEY = os.getenv("GOAPI_API_KEY")
 let priceCache = {};
 let lastCacheTime = {};
 
