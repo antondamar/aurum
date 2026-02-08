@@ -1,39 +1,63 @@
 const BACKEND_URL = 'https://aurum-backend-tpaz.onrender.com'; 
+const rateCache = new Map();
+
+
+const fetchRateWithFallback = async (date, currency) => {
+  const cacheKey = `${date}-${currency}`;
+  if (rateCache.has(cacheKey)) return rateCache.get(cacheKey);
+
+  const baseDate = new Date(date);
+  
+  for (let i = 0; i < 5; i++) {
+    const checkDate = new Date(baseDate);
+    checkDate.setUTCDate(baseDate.getUTCDate() - i);
+    const formattedDate = checkDate.toISOString().split('T')[0];
+
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/get-historical-rate?date=${formattedDate}&currency=${currency}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.rate !== undefined && data.rate !== null) {
+          console.log(`✅ Found: ${currency} on ${formattedDate} (Attempt ${i + 1})`);
+          // Store in cache before returning
+          rateCache.set(cacheKey, data.rate); 
+          return data.rate;
+        }
+      }
+    } catch (e) {
+      console.warn(`⚠️ No data for ${formattedDate}, checking prior day...`);
+    }
+  }
+
+  console.error(`❌ No rate for ${currency} in 5-day interval ending ${date}`);
+  return 1; 
+};
 
 export const calculateTotalCostBasis = async (buyLots, targetCurrency = 'USD') => {
   if (!buyLots || buyLots.length === 0) return 0;
 
-  let totalBasis = 0;
-
-  // We map through lots to handle potential async rate fetching
   const lotCalculations = buyLots.map(async (lot) => {
     const amount = lot.remainingAmount || 0;
     const originalPrice = lot.originalPrice || 0;
     const originalCurrency = lot.originalCurrency || 'USD';
     const date = lot.purchaseDate;
 
-    // 1. If same currency, no conversion needed
     if (originalCurrency === targetCurrency) {
       return amount * originalPrice;
     }
 
-    // 2. Fetch rates from your Firebase-backed endpoint for that specific date
-    // You'll need to implement this fetcher in priceService.js
-    const response = await fetch(`${BACKEND_URL}/get-historical-rate?date=${date}&currency=${targetCurrency}`);
-    const data = await response.json();
-    const rateToTarget = data.rate || 1;
-
-    const responseOrig = await fetch(`${BACKEND_URL}/get-historical-rate?date=${date}&currency=${originalCurrency}`);
-    const dataOrig = await responseOrig.json();
-    const rateToOriginal = dataOrig.rate || 1;
+    // Fetch both rates using the fallback logic
+    const rateToTarget = await fetchRateWithFallback(date, targetCurrency);
+    const rateToOriginal = await fetchRateWithFallback(date, originalCurrency);
 
     // Formula: (Price / OriginalRate) * TargetRate
     const priceInTarget = (originalPrice / rateToOriginal) * rateToTarget;
     
     return amount * priceInTarget;
   });
-
-  
 
   const results = await Promise.all(lotCalculations);
   return results.reduce((acc, val) => acc + val, 0);
@@ -42,16 +66,21 @@ export const calculateTotalCostBasis = async (buyLots, targetCurrency = 'USD') =
 export const convertCurrency = async (amount, price, fromCurrency, toCurrency, date) => {
   if (fromCurrency === toCurrency) return price;
 
-  // Fetch rates from your backend (which pulls from Firebase)
-  const response = await fetch(`${BACKEND_URL}/get-historical-rate?date=${date}&currency=${toCurrency}`);
-  const data = await response.json();
-  const rateToTarget = data.rate || 1;
+  // Ensure we have a valid date string
+  let initialDate;
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) throw new Error("Invalid Date");
+    initialDate = d.toISOString().split('T')[0];
+  } catch (err) {
+    console.error("Date error in convertCurrency:", err);
+    return price;
+  }
 
-  const responseOrig = await fetch(`${BACKEND_URL}/get-historical-rate?date=${date}&currency=${fromCurrency}`);
-  const dataOrig = await responseOrig.json();
-  const rateToOriginal = dataOrig.rate || 1;
+  // Use fallback logic to find the nearest valid market rate
+  const rateToTarget = await fetchRateWithFallback(initialDate, toCurrency);
+  const rateToOriginal = await fetchRateWithFallback(initialDate, fromCurrency);
 
-  // Formula: (Price / OriginalRate) * TargetRate
   return (price / rateToOriginal) * rateToTarget;
 };
 

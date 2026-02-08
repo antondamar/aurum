@@ -332,8 +332,10 @@ const Auth = () => {
                   <label className="text-[10px] font-bold text-zinc-500 tracking-widest uppercase ml-1">First Name</label>
                   <input 
                     type="text" 
-                    placeholder="Ferrel"
-                    className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all"
+                    placeholder="First Name"
+                    className={`w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all ${
+                      firstName ? 'text-white' : 'text-zinc-500 placeholder:text-zinc-500'
+                    }`}
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                   />
@@ -342,8 +344,10 @@ const Auth = () => {
                   <label className="text-[10px] font-bold text-zinc-500 tracking-widest uppercase ml-1">Last Name</label>
                   <input 
                     type="text" 
-                    placeholder="Handoyo"
-                    className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all"
+                    placeholder="Last Name"
+                    className={`w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all ${
+                      lastName ? 'text-white' : 'text-zinc-500 placeholder:text-zinc-500'
+                    }`}
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                   />
@@ -354,8 +358,10 @@ const Auth = () => {
                 <label className="text-[10px] font-bold text-zinc-500 tracking-widest uppercase ml-1">Username</label>
                 <input 
                   type="text" 
-                  placeholder="ferrelhandoyo"
-                  className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all"
+                  placeholder="@username"
+                  className={`w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all ${
+                    username ? 'text-white' : 'text-zinc-500 placeholder:text-zinc-500'
+                  }`}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
@@ -374,7 +380,9 @@ const Auth = () => {
             <input 
               type={isRegistering ? "email" : "text"}
               placeholder={isRegistering ? "name@domain.com" : "email or username"}
-              className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all"
+              className={`w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all ${
+                email ? 'text-white' : 'text-zinc-500 placeholder:text-zinc-500'
+              }`}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -387,7 +395,9 @@ const Auth = () => {
               <input 
                 type={showPassword ? "text" : "password"} // Logic to toggle type
                 placeholder="••••••••••"
-                className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all"
+                className={`w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-[#D3AC2C] mt-1 transition-all ${
+                  password ? 'text-white' : 'text-zinc-500 placeholder:text-zinc-500'
+                }`}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -441,7 +451,7 @@ const Auth = () => {
                     confirmPassword && confirmPassword !== password 
                       ? 'border-red-500' // RED BORDER if mismatch
                       : 'border-zinc-800 focus:border-[#D3AC2C]'
-                  }`}
+                  } ${confirmPassword ? 'text-white' : 'text-zinc-500 placeholder:text-zinc-500'}`}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />
@@ -471,12 +481,9 @@ const Auth = () => {
 
           <button 
             type="submit" 
-            className="w-full relative overflow-hidden font-bold py-4 rounded-xl transition-all shadow-lg 
-                      text-black uppercase tracking-widest
-                      bg-gradient-to-br from-[#F9E08B] via-[#D3AC2C] to-[#A57A03]
-                      hover:brightness-110 active:scale-[0.98] 
-                      before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent before:translate-x-[-100%] hover:before:translate-x-[100%] before:transition-transform before:duration-700
-                      shadow-[#D3AC2C]/20 border border-[#F9E08B]/30"
+            className="w-full bg-[#D3AC2C] text-black font-bold py-4 rounded-full uppercase text-s tracking-widest 
+                      transition-all hover:bg-[#af902b] active:bg-[#9a7f26] active:scale-[0.98] 
+                      disabled:opacity-50 border border-white/5"
           >
             {isRegistering ? 'SIGN UP' : 'LOGIN'}
           </button>

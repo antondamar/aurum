@@ -108,8 +108,21 @@ export default function AddAsset({
         <div className="flex flex-col gap-2">
           <label className="text-[10px] font-bold text-zinc-500 tracking-widest uppercase">Type</label>
           <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800 gap-1">
-            <button type="button" onClick={() => setNewAsset({...newAsset, type: 'BUY'})} className={`flex-1 py-3 rounded-lg text-xs font-black transition-all ${newAsset.type === 'BUY' ? 'bg-gradient-to-br from-[#4ADE80] via-[#22C55E] to-[#15803D] text-black shadow-lg shadow-green-500/20' : 'bg-green-500/10 text-green-500/40'}`}>BUY</button>
-            <button type="button" onClick={() => setNewAsset({...newAsset, type: 'SELL'})} className={`flex-1 py-3 rounded-lg text-xs font-black transition-all ${newAsset.type === 'SELL' ? 'bg-gradient-to-br from-[#F87171] via-[#EF4444] to-[#B91C1C] text-black shadow-lg shadow-red-500/20' : 'bg-red-500/10 text-red-500/40'}`}>SELL</button>
+            <button 
+              type="button" 
+              onClick={() => setNewAsset({...newAsset, type: 'BUY'})} 
+              className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${newAsset.type === 'BUY' ? 'bg-[#22C55E] text-black border border-white/5 hover:bg-[#1da84f] active:scale-[0.98]' : 'bg-zinc-900/50 text-zinc-500 border border-white/5 hover:bg-zinc-900/70'}`}
+            >
+              BUY
+            </button>
+
+            <button 
+              type="button" 
+              onClick={() => setNewAsset({...newAsset, type: 'SELL'})} 
+              className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${newAsset.type === 'SELL' ? 'bg-[#EF4444] text-black border border-white/5 hover:bg-[#dc2626] active:scale-[0.98]' : 'bg-zinc-900/50 text-zinc-500 border border-white/5 hover:bg-zinc-900/70'}`}
+            >
+              SELL
+            </button>
           </div>
         </div>
 
@@ -126,14 +139,29 @@ export default function AddAsset({
 
         <div className="flex flex-col gap-2">
           <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">Purchase Date</label>
-          <input type="date" className="bg-black border border-zinc-800 p-4 rounded-xl text-sm text-white font-bold outline-none focus:border-[#D3AC2C]" value={newAsset.purchaseDate} onChange={(e) => setNewAsset({ ...newAsset, purchaseDate: e.target.value })} />
+          <input 
+            type="date" 
+            className="bg-black border border-zinc-800 p-4 rounded-xl text-sm text-white font-bold outline-none focus:border-[#D3AC2C]"
+            value={newAsset.purchaseDate} 
+            onChange={(e) => {
+              // Force the value to a clean string to avoid browser locale interference
+              const rawDate = e.target.value; 
+              if (!rawDate) return;
+              
+              // Ensure it is strictly YYYY-MM-DD before updating state
+              const cleanDate = new Date(rawDate).toISOString().split('T')[0];
+              setNewAsset({ ...newAsset, purchaseDate: cleanDate });
+            }} 
+          />
         </div>
 
         {/* SUBMIT */}
         <div className="lg:col-span-4 flex justify-end">
           <button 
             type="submit" 
-            className="relative overflow-hidden bg-gradient-to-br from-[#F9E08B] via-[#D3AC2C] to-[#A57A03] text-black font-bold px-10 py-4 rounded-xl transition-all shadow-lg shadow-[#D3AC2C]/20"
+            className="relative overflow-hidden bg-[#D3AC2C] text-black font-bold px-10 py-4 rounded-full 
+                      transition-all border border-white/5
+                      hover:bg-[#af902b] active:scale-[0.98] active:bg-[#D3AC2C] "
             disabled={!newAsset.name || !newAsset.buyPrice || !newAsset.amount}
           >
             Add to Portfolio

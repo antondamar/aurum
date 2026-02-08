@@ -152,7 +152,9 @@ const Insights = () => {
           <button 
             onClick={handleStartAnalysis}
             disabled={loading}
-            className="w-full bg-gradient-to-br from-[#FDE68A] via-[#D3AC2C] to-[#A57A03] text-black font-black py-4 rounded-xl uppercase text-[11px] tracking-widest transition-all hover:brightness-110 disabled:opacity-50 shadow-lg shadow-[#D3AC2C]/20"
+            className="w-full bg-[#D3AC2C] text-black font-bold py-4 rounded-full text-[14px] tracking-widest 
+                      transition-all hover:bg-[#af902b] active:bg-[#9a7f26] active:scale-[0.98] 
+                      disabled:opacity-50 border border-white/5"
           >
             {loading ? (
               <div className="flex items-center justify-center gap-2">

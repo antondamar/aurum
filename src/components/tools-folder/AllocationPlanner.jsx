@@ -69,6 +69,18 @@ const AllocationPlanner = ({ portfolios, rates, currency, setView }) => {
     }).format(converted);
   };
 
+  const getAdaptiveFontSize = (value) => {
+    const text = formatCurrency(value);
+    const length = text.length;
+    
+    // Adjust thresholds for currency symbols
+    if (length <= 12) return 'text-6xl'; // Normal size for shorter numbers
+    if (length <= 18) return 'text-5xl'; // Slightly smaller
+    if (length <= 24) return 'text-4xl'; // Medium size
+    if (length <= 30) return 'text-3xl'; // Smaller
+    return 'text-2xl'; // Smallest for very long numbers
+  };
+
   return (
     <div className="space-y-10 pb-32 animate-in fade-in duration-700">
 
@@ -94,10 +106,9 @@ const AllocationPlanner = ({ portfolios, rates, currency, setView }) => {
             </div>
           </div>
 
-          {/* TOTAL ASSET VALUE + SWITCHER CARD */}
           <div className="aurum-card p-10 rounded-[2.5rem] bg-black/40 backdrop-blur-md border border-[#D3AC2C]/20 text-center">
             <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.3em] mb-4">Total Current Asset Value</p>
-            <p className="text-6xl font-black text-[#D3AC2C] tracking-tighter tabular-nums mb-7">
+            <p className={`font-black text-[#D3AC2C] tracking-tighter tabular-nums mb-7 px-2 ${getAdaptiveFontSize(totalValue)}`}>
               {formatCurrency(totalValue)}
             </p>
 
@@ -143,17 +154,17 @@ const AllocationPlanner = ({ portfolios, rates, currency, setView }) => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="text-[12px] font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5">
-                <th className="pb-6">Asset</th>
+                <th className="pb-6 text-center">Asset</th>
                 <th className="pb-6 text-center">Current %</th>
                 <th className="pb-6 text-center">Target %</th>
-                <th className="pb-6 text-right">Action Required</th>
+                <th className="pb-6 text-center">Action Required</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.03]">
               {plannerData.map(item => (
                 <tr key={item.name} className="group hover:bg-white/[0.01] transition-colors">
-                  <td className="py-6">
-                    <div className="flex items-center gap-3">
+                  <td className="py-6 text-center w-1/4">
+                    <div className="flex items-center justify-center gap-3">
                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
                        <span className="text-white font-bold">{item.name}</span>
                     </div>
@@ -162,22 +173,23 @@ const AllocationPlanner = ({ portfolios, rates, currency, setView }) => {
                     {item.currentPct.toFixed(1)}%
                   </td>
                   
-                  <td className="py-6 text-center">
+                  <td className="py-6 text-center w-1/4">
                     <IncreaseDecrease 
-                      itemName={item.name} 
-                      targetValue={targets[item.name]} 
-                      setTargets={setTargets} 
+                      value={targets[item.name]} 
+                      setter={(newValue) => setTargets(prev => ({ ...prev, [item.name]: newValue }))}
+                      step={0.1}
+                      decimals={1}
                     />
                   </td>
 
-                  <td className="py-6 text-right">
+                  <td className="py-6 text-center w-1/4">
                     {targets[item.name] ? (
-                      <div className="flex flex-col items-end">
+                      <div className="flex flex-col items-center">
                         <span className={`text-lg font-black tracking-tighter ${item.action === 'BUY' ? 'text-green-500' : 'text-red-500'}`}>
                           {item.action} {formatCurrency(Math.abs(item.difference))}
                         </span>
                         <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">
-                           {Math.abs(item.difference / (item.unitPrice || 1)).toFixed(4)} Units
+                          {Math.abs(item.difference / (item.unitPrice || 1)).toFixed(5)} Units
                         </span>
                       </div>
                     ) : (

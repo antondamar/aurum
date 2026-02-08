@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { fetchCryptoPrice, fetchStockPrice, fetchBatchCryptoPrices } from '../../data/price-api-data/priceService';
 import { motion } from 'framer-motion';
+import IncreaseDecrease from '../ui-button-folder/IncreaseDecrease';
 
 import UpdatePrice from '../ui-button-folder/UpdatePrice';
 
@@ -208,6 +209,19 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
     }).format(converted);
   };
 
+  const getAdaptiveFontSize = (value, targetCurrency = localCurrency) => {
+    const text = formatCurrency(value, targetCurrency);
+    const length = text.length;
+    
+    // Adjust thresholds for currency symbols
+    if (length <= 12) return 'text-6xl'; // Normal size for shorter numbers
+    if (length <= 18) return 'text-5xl'; // Slightly smaller
+    if (length <= 24) return 'text-4xl'; // Medium size
+    if (length <= 30) return 'text-3xl'; // Smaller
+    return 'text-2xl'; // Smallest for very long numbers
+  };
+
+
   // Refresh button logic
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -223,10 +237,11 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
       // Calculate the target in USD, then convert to the display currency
       const targetInUSD = asset.unitPrice * multiplier;
       const targetInDisplayCurrency = convertFromUSD(targetInUSD, activeCurr);
-      newTargets[asset.name] = targetInDisplayCurrency.toFixed(2);
+      newTargets[asset.name] = targetInDisplayCurrency.toString(); // Store as string
     });
     setTargetPrices(newTargets);
   };
+
 
   const isPositive = totals.percentChange >= 0;
 
@@ -249,7 +264,7 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">
                 Current Total Portfolio Value
               </p>
-              <p className="text-3xl font-black text-white tracking-tighter">
+              <p className={`font-black text-white tracking-tighter truncate ${getAdaptiveFontSize(totals.currentTotal, localCurrency)}`}>
                 {formatCurrency(totals.currentTotal, localCurrency)}
               </p>
             </div>
@@ -266,7 +281,7 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
               ))}
               <button 
                 onClick={() => setTargetPrices({})} 
-                className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-zinc-600 hover:text-white transition-all hover:border-white/20"
+                className="px-4 py-2 rounded-full bg-zinc-900/50 text-[10px] font-bold uppercase tracking-widest text-zinc-500 border border-white/5 hover:bg-zinc-800 transition-all"
               >
                 Reset
               </button>
@@ -277,7 +292,7 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.3em] mb-4">
               Projected Net Worth
             </p>
-            <p className="text-6xl font-black text-[#D3AC2C] tracking-tighter mb-4 tabular-nums">
+            <p className={`font-black text-[#D3AC2C] tracking-tighter mb-4 tabular-nums truncate px-2 whitespace-nowrap ${getAdaptiveFontSize(totals.projectedTotal, localCurrency)}`}>
               {formatCurrency(totals.projectedTotal, localCurrency)}
             </p>
             
@@ -360,13 +375,13 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
             <div key={asset.id} className="aurum-card p-8 rounded-[2rem] border border-white/5 hover:border-white/10 transition-all hover:scale-[1.02]">
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h4 className="text-white font-bold text-lg">{asset.name}</h4>
+                  <h4 className="text-white font-bold text-3xl">{asset.name}</h4>
                   <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">
                     Holdings: {asset.amount.toLocaleString()}
                   </p>
                 </div>
                 <select 
-                  className="bg-zinc-900 border border-white/10 text-[13px] text-zinc-400 font-bold p-1.5 rounded-lg outline-none cursor-pointer hover:border-[#D3AC2C] transition-colors"
+                  className="bg-zinc-900 border border-white/10 text-[16px] text-zinc-400 font-bold p-1.5 rounded-lg outline-none cursor-pointer hover:border-[#D3AC2C] transition-colors"
                   value={activeAssetCurrency}
                   onChange={(e) => handleCurrencyChange(asset.name, e.target.value)}
                 >
@@ -379,7 +394,7 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
               <div className="space-y-4">
                 {/* CURRENT HOLDING VALUE */}
                 <div className="bg-black/30 p-3 rounded-xl">
-                  <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-1">
+                  <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">
                     Current Holding Value
                   </p>
                   <p className="text-white font-bold text-lg">
@@ -389,36 +404,35 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
 
                 {/* CURRENT UNIT PRICE */}
                 <div className="flex justify-between items-center py-2 border-y border-white/5">
-                  <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest">Current Unit Price</span>
-                  <span className="gold-text font-bold text-xs">
+                  <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Current Unit Price</span>
+                  <span className="gold-text font-bold text-lg">
                     {formatCurrency(asset.unitPrice, activeAssetCurrency)}
                   </span>
                 </div>
 
                 {/* TARGET PRICE INPUT */}
                 <div className="relative pt-2">
-                  <label className="absolute -top-1 left-4 px-2 bg-[#010203] text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
+                  <label className="absolute -top-1 left-1/2 transform -translate-x-1/2 px-2 bg-[#010203] text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
                     Target Price ({activeAssetCurrency})
                   </label>
-                  <input 
-                    type="number"
-                    value={targetPrices[asset.name] || ''}
-                    placeholder={convertFromUSD(asset.unitPrice, activeAssetCurrency).toFixed(2)}
-                    onChange={(e) => {
-                      // Store the value directly as the user entered it (in selected currency)
-                      setTargetPrices(prev => ({ 
-                        ...prev, 
-                        [asset.name]: e.target.value
-                      }));
-                    }}
-                    className="w-full bg-transparent border border-zinc-800 p-4 rounded-xl text-[#D3AC2C] font-bold outline-none focus:border-[#D3AC2C] transition-all placeholder:text-zinc-600"
-                    step="any"
-                  />
+                  <div className="mt-2 flex justify-center">
+                    <IncreaseDecrease 
+                      value={targetPrices[asset.name] || ''}
+                      setter={(newValue) => {
+                        setTargetPrices(prev => ({ 
+                          ...prev, 
+                          [asset.name]: newValue
+                        }));
+                      }}
+                      step={0.01}
+                      decimals={2}
+                    />
+                  </div>
                 </div>
 
                 {/* PROJECTED HOLDING VALUE */}
                 <div className="bg-gradient-to-r from-[#D3AC2C]/10 to-transparent p-3 rounded-xl">
-                  <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-1">
+                  <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest mb-1">
                     Projected Holding Value
                   </p>
                   <div className="flex justify-between items-center">
@@ -441,10 +455,10 @@ const GoalPriceTool = ({ portfolios, rates, currency, setView }) => {
                         const newTargetInDisplayCurrency = convertFromUSD(newTargetUSD, activeAssetCurrency);
                         setTargetPrices(prev => ({
                           ...prev,
-                          [asset.name]: newTargetInDisplayCurrency.toFixed(2)
+                          [asset.name]: newTargetInDisplayCurrency.toString()
                         }));
                       }}
-                      className="flex-1 text-xs font-bold text-zinc-500 hover:text-[#D3AC2C] bg-zinc-900/50 hover:bg-zinc-800 py-2 rounded-lg transition-all"
+                      className="flex-1 text-xs font-bold text-zinc-400 hover:text-[#D3AC2C] bg-zinc-900/50 hover:bg-zinc-800 py-2 rounded-lg transition-all"
                     >
                       {multiplier}×
                     </button>

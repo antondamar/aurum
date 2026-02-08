@@ -4,6 +4,9 @@ import { motion } from 'framer-motion';
 import { ASSET_LIBRARY } from '../../data/assets-data/assetLibrary';
 import IncreaseDecrease from '../ui-button-folder/IncreaseDecrease';
 import { calculateFIFOMetrics } from '../../data/algo-data/FIFO'
+import { calculateAverageBuyPrice } from '../../data/algo-data/CostBasis';
+
+const BACKEND_URL = 'https://aurum-backend-tpaz.onrender.com';
 
 const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates }) => {
   const { portfolioId, assetId } = useParams();
@@ -20,7 +23,6 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
     });
   };
 
-
   const [editingTxId, setEditingTxId] = useState(null);
   const [editFormData, setEditFormData] = useState({
     type: 'BUY',
@@ -34,8 +36,35 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
   const [localCurrency, setLocalCurrency] = useState(currency);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [displayTxs, setDisplayTxs] = useState([]);
+  const [metrics, setMetrics] = useState(null);
+  const [previewRates, setPreviewRates] = useState({ editRate: 1, localRate: 1 });
 
-  // Move portfolio and asset declarations FIRST, before any effects that use them
+  useEffect(() => {
+    const fetchPreviewRates = async () => {
+      if (!editingTxId) return;
+      
+      try {
+        // 1. Fetch historical rate for the currency being EDITED (e.g., IDR in 2004)
+        const resEdit = await fetch(`${BACKEND_URL}/get-historical-rate?date=${editFormData.date}&currency=${editFormData.editCurrency}`);
+        const dataEdit = await resEdit.json();
+        
+        // 2. Fetch historical rate for the currency being VIEWED (e.g., USD switcher)
+        const resLocal = await fetch(`${BACKEND_URL}/get-historical-rate?date=${editFormData.date}&currency=${localCurrency}`);
+        const dataLocal = await resLocal.json();
+        
+        setPreviewRates({
+          editRate: dataEdit.rate || 1,
+          localRate: dataLocal.rate || 1
+        });
+      } catch (err) {
+        console.error("Preview rate fetch failed", err);
+      }
+    };
+    
+    fetchPreviewRates();
+  }, [editFormData.date, editFormData.editCurrency, localCurrency, editingTxId]);
+
   const portfolio = useMemo(() => 
     portfolios?.find(p => String(p.id) === String(portfolioId)) || null,
     [portfolios, portfolioId]
@@ -98,6 +127,21 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
     return null;
   }, [asset]);
 
+  useEffect(() => {
+    const loadData = async () => {
+      if (asset?.transactions) {
+        setIsLoading(true);
+        // Pass 'localCurrency' (the switcher) to the calculation
+        const results = await calculateFIFOMetrics(asset.transactions, localCurrency);
+        setMetrics(results);
+        setDisplayTxs(results.convertedTransactions);
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, [asset, localCurrency]);
+
+
   // Now effects that depend on portfolio/asset can be defined AFTER their declarations
   useEffect(() => {
     console.log("AssetHistory Debug:", {
@@ -128,14 +172,15 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
   }, [currency]);
 
   // Format value dengan kurs
-  const formatValue = useCallback((val, targetCurrency = localCurrency) => {
-    // val is ALWAYS assumed to be in USD
-    const converted = val * (rates[targetCurrency] || 1);
+  const formatValue = useCallback((val, targetCurrency = localCurrency, isAlreadyConverted = false) => {
+    // FIX: If isAlreadyConverted is true, we use the value as-is.
+    // Otherwise, we assume the input is USD and multiply by the current rate.
+    const converted = isAlreadyConverted ? val : val * (rates[targetCurrency] || 1);
     
-    // Currencies that typically don't use decimals
     const noDecimalCurrencies = ['IDR', 'JPY'];
     const isNoDecimal = noDecimalCurrencies.includes(targetCurrency);
     
+    // Dynamic decimals: IDR gets 0, others get 2 (or 5 for small amounts)
     const decimals = isNoDecimal ? 0 : (Math.abs(converted) < 2 ? 5 : 2);
     
     return new Intl.NumberFormat(targetCurrency === 'IDR' ? 'id-ID' : 'en-US', {
@@ -169,84 +214,94 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
 
   // Initialize edit form with transaction data
   const startEditTransaction = (transaction) => {
-    // Use priceUSD as the base for conversion to the edit currency
-    const basePriceUSD = transaction.priceUSD || convertToUSD(transaction.price, transaction.currency);
-    
-    // FIX: Change 'targetCurrency' to 'localCurrency'
-    const priceInEditCurrency = convertFromUSD(basePriceUSD, localCurrency);
-    
     setEditFormData({
       type: transaction.type,
-      // FIX: Change 'targetCurrency' to 'localCurrency'
-      price: priceInEditCurrency.toFixed(localCurrency === 'IDR' ? 0 : 5), 
+      price: transaction.price.toString(), // Use the actual price entered in 2004
       amount: transaction.amount.toString(),
       date: transaction.date,
-      editCurrency: localCurrency // Set this to the current view currency
+      editCurrency: transaction.currency || 'USD' // Use the original currency (e.g., IDR)
     });
     setEditingTxId(transaction.id);
   };
 
-  // Fungsi untuk mengedit transaksi
-  const saveTransactionEdit = (transactionId) => {
-    const originalPrice = parseFloat(editFormData.price);
-    const priceUSD = convertToUSD(originalPrice, editFormData.editCurrency);
-    const amount = parseFloat(editFormData.amount);
-    const valueUSD = priceUSD * amount;
+  const saveTransactionEdit = async (transactionId) => {
+    try {
+      const originalPrice = parseFloat(editFormData.price);
+      const amount = parseFloat(editFormData.amount);
 
-    const editData = {
-      type: editFormData.type,
-      price: originalPrice,
-      priceUSD: priceUSD,
-      currency: editFormData.editCurrency,
-      amount: amount,
-      value: valueUSD,
-      date: editFormData.date
-    };
+      // FETCH HISTORICAL RATE FOR THE DATE
+      const response = await fetch(
+        `${BACKEND_URL}/get-historical-rate?date=${editFormData.date}&currency=${editFormData.editCurrency}`
+      );
+      const rateData = await response.json();
+      const rateAtDate = rateData.rate || 1;
 
-    setPortfolios(prev => prev.map(p => {
-      if (String(p.id) === String(portfolioId)) {
-        const newAssets = p.assets.map(a => {
-          if (String(a.id) === String(assetId)) {
-            // Use the existing price per unit to maintain market valuation
-            const currentPrice = a.value / a.amount; 
-            
-            const newTxs = a.transactions.map(t => 
-                t.id === transactionId ? { ...t, ...editData } : t
-            );
-            
-            // Use your existing FIFO recalculator
-            const metrics = calculateFIFOMetrics(newTxs);
-            return {
-              ...a,
-              ...metrics,
-              value: currentPrice * metrics.amount,
-              transactions: newTxs,
-              purchaseDate: metrics.firstDate || a.purchaseDate
-            };
-          }
-          return a;
-        });
-        return { ...p, assets: newAssets };
-      }
-      return p;
-    }));
-    setEditingTxId(null);
+      // Calculate USD value based on historical rate
+      const priceUSD = originalPrice / rateAtDate;
+      const valueUSD = priceUSD * amount;
+
+      const editData = {
+        type: editFormData.type,
+        price: originalPrice,
+        priceUSD: priceUSD,
+        currency: editFormData.editCurrency,
+        amount: amount,
+        value: valueUSD,
+        date: editFormData.date,
+        exchangeRate: rateAtDate // Optional: store for record
+      };
+
+      const newTxs = asset.transactions.map(t => 
+        t.id === transactionId ? { ...t, ...editData } : t
+      );
+      
+      const metrics = await calculateFIFOMetrics(newTxs, 'USD');
+      const currentPrice = asset.value / asset.amount;
+
+      setPortfolios(prev => prev.map(p => {
+        if (String(p.id) === String(portfolioId)) {
+          const newAssets = p.assets.map(a => {
+            if (String(a.id) === String(assetId)) {
+              return {
+                ...a,
+                ...metrics,
+                value: currentPrice * metrics.amount,
+                transactions: newTxs
+              };
+            }
+            return a;
+          });
+          return { ...p, assets: newAssets };
+        }
+        return p;
+      }));
+      setEditingTxId(null);
+    } catch (err) {
+      console.error("Edit failed:", err);
+      alert("Could not save changes. Check backend connection.");
+    }
   };
 
-  const removeTransaction = (transactionId) => {
+  const removeTransaction = async (transactionId) => {
     if (!window.confirm('Are you sure you want to remove this transaction?')) return;
-    
+
+    // --- STEP 1: CALCULATE NEW DATA OUTSIDE SETSTATE ---
+    const newTxs = asset.transactions.filter(t => t.id !== transactionId);
+    const currentPrice = asset.value / asset.amount;
+
+    let metrics = null;
+    if (newTxs.length > 0) {
+      metrics = await calculateFIFOMetrics(newTxs);
+    }
+
+    // --- STEP 2: UPDATE STATE ---
     setPortfolios(prev => {
       const updated = prev.map(p => {
         if (String(p.id) === String(portfolioId)) {
           const newAssets = p.assets.map(a => {
             if (String(a.id) === String(assetId)) {
-              const currentPrice = a.value / a.amount;
-              const newTxs = a.transactions.filter(t => t.id !== transactionId);
-              
-              if (newTxs.length === 0) return null;
+              if (newTxs.length === 0) return null; // Asset will be filtered out below
 
-              const metrics = calculateFIFOMetrics(newTxs);
               return {
                 ...a,
                 ...metrics,
@@ -263,18 +318,28 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
         return p;
       });
 
-      // Check if asset still exists to determine if we should redirect
-      const assetExists = updated
+      // Handle redirect if asset is gone
+      const assetStillExists = updated
         .find(p => String(p.id) === String(portfolioId))
         ?.assets.find(a => String(a.id) === String(assetId));
         
-      if (!assetExists) {
-        navigate(`/portfolio`, { state: { activeId: portfolioId } });
+      if (!assetStillExists) {
+        navigate(`/portfolio`, { state: { activePortfolioId: Number(portfolioId) } });
       }
       
       return updated;
     });
   };
+
+  const costBasisUSD = useMemo(() => {
+    if (!asset || !asset.transactions) return 0;
+    return asset.transactions.reduce((acc, tx) => acc + (tx.priceUSD * tx.amount), 0);
+  }, [asset]);
+
+  const avgBuyUSD = asset ? calculateAverageBuyPrice(costBasisUSD, asset.amount) : 0;
+  // Rename pnlUSD to pnl to fix the "not defined" error
+  const pnl = asset ? asset.value - costBasisUSD : 0; 
+  const pnlPercent = (asset && costBasisUSD > 0) ? (pnl / costBasisUSD) * 100 : 0;
 
   // Loading and error states
   if (isLoading) {
@@ -321,11 +386,6 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
       </div>
     );
   }
-
-  // Hitung PnL untuk header
-  const costBasis = asset.avgBuy * asset.amount;
-  const pnl = asset.value - costBasis;
-  const pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
 
   return (
     <div className="pt-10 px-8 max-w-7xl mx-auto pb-32">
@@ -390,15 +450,16 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
         </div>
 
           <div className="bg-black/40 backdrop-blur-md p-6 rounded-3xl border border-white/5 min-w-[240px]">
-             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mb-2">Profit / Loss</p>
-             <div className="flex items-end gap-3">
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mb-2">Profit / Loss</p>
+            <div className="flex items-end gap-3">
                 <span className={`text-4xl font-black tabular-nums ${pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {pnl >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
                 </span>
                 <span className={`text-sm font-bold mb-1 ${pnl >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                    {formatValue(pnl)}
+                    {/* Change 'true' to 'false' because pnl is in USD and needs conversion to localCurrency */}
+                    {formatValue(pnl, localCurrency, false)} 
                 </span>
-             </div>
+            </div>
           </div>
           {/* Transaction Summary Card */}
           <div className="bg-black/40 backdrop-blur-md p-6 rounded-3xl border border-white/5 min-w-[240px]">
@@ -430,10 +491,27 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
       {/* STATS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
         {[
-          { label: 'Average Buy Price', val: formatValue(asset.avgBuy), color: 'text-white' },
-          { label: 'Cost Basis', val: formatValue(costBasis), color: 'text-white' },
-          { label: 'Current Price', val: formatValue(asset.value / asset.amount), color: 'text-[#D3AC2C]' },
-          { label: 'Investing Since', val: formatDate(asset.purchaseDate), color: 'text-white' },
+          { 
+            label: 'Average Buy Price', 
+            val: formatValue(metrics?.avgBuy || 0, localCurrency, true), 
+            color: 'text-white' 
+          },
+          { 
+            label: 'Cost Basis', 
+            val: formatValue(metrics?.costBasis || 0, localCurrency, true), 
+            color: 'text-white' 
+          },
+          { 
+            label: 'Current Price', 
+            // Market value is live, so this remains 'false' (it converts USD -> Today's IDR)
+            val: formatValue(asset.value / asset.amount, localCurrency, false), 
+            color: 'text-[#D3AC2C]' 
+          },
+          { 
+            label: 'Investing Since', 
+            val: formatDate(asset.purchaseDate), 
+            color: 'text-white' 
+          }
         ].map((stat, i) => (
           <div key={i} className="aurum-card p-6 rounded-3xl border border-white/[0.03]">
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">{stat.label}</p>
@@ -508,7 +586,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
               </thead>
 
               <tbody className="divide-y divide-zinc-900">
-                {(asset.transactions ? [...asset.transactions] : [])
+                {displayTxs
                   .sort((a, b) => new Date(b.date) - new Date(a.date))
                   .map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-white/[0.01]">
@@ -530,48 +608,40 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                       <td className="py-6 text-center">
                         {editingTxId === transaction.id ? (
                           <div className="flex gap-2 justify-center">
-                            {/* METALLIC GREEN BUY BUTTON */}
                             <button
                               onClick={() => setEditFormData({...editFormData, type: 'BUY'})}
-                              className={`px-4 py-1.5 rounded-full text-[12px] font-black transition-all relative overflow-hidden tracking-widest
+                              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all tracking-widest
                                 ${editFormData.type === 'BUY' 
-                                  ? 'bg-gradient-to-br from-[#4ADE80] via-[#22C55E] to-[#15803D] text-black shadow-lg shadow-green-500/20 border border-[#4ADE80]/30 active:scale-[0.95]' 
-                                  : 'bg-green-500/10 text-green-500/40 hover:bg-green-500/20'
-                                }
-                                before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
-                                before:via-white/30 before:to-transparent before:translate-x-[-100%] 
-                                hover:before:translate-x-[100%] before:transition-transform before:duration-700`}
+                                  ? 'bg-[#22C55E] text-black border border-white/5 hover:bg-[#1da84f] active:scale-[0.98] active:bg-[#1a9547]' 
+                                  : 'bg-zinc-900/50 text-zinc-500 border border-white/5 hover:bg-zinc-900/70'
+                                }`}
                             >
                               BUY
                             </button>
 
-                            {/* METALLIC RED SELL BUTTON */}
                             <button
                               onClick={() => setEditFormData({...editFormData, type: 'SELL'})}
-                              className={`px-4 py-1.5 rounded-full text-[12px] font-black transition-all relative overflow-hidden tracking-widest
+                              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all tracking-widest
                                 ${editFormData.type === 'SELL' 
-                                  ? 'bg-gradient-to-br from-[#F87171] via-[#EF4444] to-[#B91C1C] text-black shadow-lg shadow-red-500/20 border border-[#F87171]/30 active:scale-[0.95]' 
-                                  : 'bg-red-500/10 text-red-500/40 hover:bg-red-500/20'
-                                }
-                                before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
-                                before:via-white/30 before:to-transparent before:translate-x-[-100%] 
-                                hover:before:translate-x-[100%] before:transition-transform before:duration-700`}
+                                  ? 'bg-[#EF4444] text-black border border-white/5 hover:bg-[#dc2626] active:scale-[0.98] active:bg-[#c82323]' 
+                                  : 'bg-zinc-900/50 text-zinc-500 border border-white/5 hover:bg-zinc-900/70'
+                                }`}
                             >
                               SELL
                             </button>
                           </div>
                         ) : (
-                          <span className={`px-4 py-1.5 rounded-full text-[12px] font-black tracking-widest border shadow-sm ${
+                          <span className={`px-4 py-1.5 rounded-full text-xs font-bold tracking-widest border border-white/5 ${
                             transaction.type === 'BUY' 
-                              ? 'bg-gradient-to-br from-[#4ADE80] via-[#22C55E] to-[#15803D] text-black border-[#4ADE80]/30 shadow-green-500/10' 
-                              : 'bg-gradient-to-br from-[#F87171] via-[#EF4444] to-[#B91C1C] text-black border-[#F87171]/30 shadow-red-500/10'
+                              ? 'bg-[#22C55E] text-black' 
+                              : 'bg-[#EF4444] text-black'
                           }`}>
                             {transaction.type}
-                          </span> 
+                          </span>
                         )}
                       </td>
                       
-                      {/* PRICE - Dynamic View Price over Original Purchase Price */}
+                      {/* PRICE - Dynamic View Price while Editing */}
                       <td className="py-6 text-center">
                         {editingTxId === transaction.id ? (
                           <div className="flex flex-col items-center gap-2">
@@ -598,19 +668,18 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                                 </div>
                               </div>
                             </div>
+                            {/* Historical Preview Label while editing */}
+                            {localCurrency !== editFormData.editCurrency}
                           </div>
                         ) : (
                           <div className="flex flex-col">
-                            {/* 1. Dynamic Top Value: Responds to the USD/CAD/IDR Switcher */}
                             <span className="text-[#D3AC2C] font-semibold">
-                              {formatValue(transaction.priceUSD)}
+                              {formatValue(transaction.displayPrice, localCurrency, true)}
                             </span>
-                            
-                            {/* 2. Static Bottom Value: Uses the currency registered in the transaction */}
                             <span className="text-xs text-zinc-500 mt-1">
                               bought at {new Intl.NumberFormat(transaction.currency === 'IDR' ? 'id-ID' : 'en-US', {
                                 style: 'currency',
-                                currency: transaction.currency || 'USD', // Fallback to USD if undefined to prevent crash
+                                currency: transaction.currency || 'USD',
                                 minimumFractionDigits: transaction.currency === 'IDR' ? 0 : 2,
                                 maximumFractionDigits: transaction.currency === 'IDR' ? 0 : 5
                               }).format(transaction.price)}
@@ -618,7 +687,7 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                           </div>
                         )}
                       </td>
-                      
+
                       {/* AMOUNT */}
                       <td className="py-6 text-center">
                         {editingTxId === transaction.id ? (
@@ -635,22 +704,27 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                           </span>
                         )}
                       </td>
-                      
-                      {/* TOTAL VALUE - Value is already stored in USD */}
+
+                      {/* TOTAL VALUE - Uses historical preview while editing */}
                       <td className="py-6 text-center">
                         {editingTxId === transaction.id ? (
                           <div className="flex flex-col">
                             <span className="text-white font-bold">
+                              {/* MATH: (Price / EditRate) * Amount * LocalRate */}
                               {formatValue(
-                                convertToUSD(parseFloat(editFormData.price || 0), editFormData.editCurrency) * 
-                                parseFloat(editFormData.amount || 0)
+                                ((parseFloat(editFormData.price || 0) / (previewRates.editRate || 1)) * parseFloat(editFormData.amount || 0)) * (previewRates.localRate || 1),
+                                localCurrency,
+                                true
                               )}
+                            </span>
+                            <span className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">
+                              ({editFormData.date})
                             </span>
                           </div>
                         ) : (
                           <div className="flex flex-col">
                             <span className="text-white font-bold">
-                              {formatValue(transaction.value)}
+                              {formatValue(transaction.displayValue, localCurrency, true)}
                             </span>
                           </div>
                         )}
@@ -663,13 +737,9 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                             <div className="flex gap-2">
                               <button
                                 onClick={() => saveTransactionEdit(transaction.id)}
-                                className="relative overflow-hidden px-4 py-2 bg-gradient-to-br from-[#4ADE80] via-[#22C55E] to-[#15803D] 
-                                          text-black text-[12px] font-black tracking-widest rounded-lg transition-all 
-                                          hover:brightness-110 active:scale-[0.95] shadow-lg shadow-green-500/20 border border-[#4ADE80]/30
-                                          before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
-                                          before:via-white/30 before:to-transparent before:translate-x-[-100%] 
-                                          hover:before:translate-x-[100%] before:transition-transform before:duration-700
-                                          after:absolute after:inset-0 after:bg-gradient-to-t after:from-white/10 after:via-transparent after:to-white/5"
+                                className="px-4 py-2 bg-[#22C55E] text-black text-xs font-bold tracking-widest rounded-full 
+                                          transition-all hover:bg-[#1da84f] active:scale-[0.98] active:bg-[#1a9547] 
+                                          border border-white/5 disabled:opacity-50"
                               >
                                 Save
                               </button>
@@ -684,13 +754,9 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                                     editCurrency: localCurrency
                                   });
                                 }}
-                                className="relative overflow-hidden px-3 py-2 bg-gradient-to-br from-[#718096] via-[#CBD5E0] to-[#4A5568] 
-                                          text-black text-[12px] font-black tracking-widest rounded-lg transition-all 
-                                          hover:brightness-110 active:scale-[0.95] shadow-lg shadow-gray-500/20 border border-gray-400/30
-                                          before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
-                                          before:via-white/40 before:to-transparent before:translate-x-[-100%] 
-                                          hover:before:translate-x-[100%] before:transition-transform before:duration-700
-                                          after:absolute after:inset-0 after:bg-gradient-to-t after:from-white/20 after:via-transparent after:to-white/10"
+                                className="px-3 py-2 bg-zinc-300 text-black text-xs font-bold tracking-widest rounded-full 
+                                          transition-all hover:bg-zinc-600 active:scale-[0.98] active:bg-zinc-500 
+                                          border border-white/5 disabled:opacity-50"
                               >
                                 Cancel
                               </button>
@@ -704,25 +770,18 @@ const AssetHistory = ({ portfolios, setPortfolios, currency, setCurrency, rates 
                             <div className="flex gap-2">
                               <button
                                 onClick={() => startEditTransaction(transaction)}
-                                className="relative overflow-hidden px-3 py-2 bg-gradient-to-br from-[#718096] via-[#CBD5E0] to-[#4A5568] 
-                                          text-black text-[12px] font-black tracking-widest rounded-lg transition-all 
-                                          hover:brightness-110 active:scale-[0.95] shadow-lg shadow-gray-500/20 border border-gray-400/30
-                                          before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
-                                          before:via-white/40 before:to-transparent before:translate-x-[-100%] 
-                                          hover:before:translate-x-[100%] before:transition-transform before:duration-700
-                                          after:absolute after:inset-0 after:bg-gradient-to-t after:from-white/20 after:via-transparent after:to-white/10"
+                                className="px-3 py-2 bg-zinc-400 text-black text-xs font-bold tracking-widest rounded-full 
+                                          transition-all hover:bg-zinc-600 active:scale-[0.98] active:bg-zinc-500 
+                                          border border-white/5 disabled:opacity-50"
+
                               >
                                 Edit
                               </button>
                               <button
                                 onClick={() => removeTransaction(transaction.id)}
-                                className="relative overflow-hidden px-3 py-2 bg-gradient-to-br from-[#B91C1C] via-[#EF4444] to-[#7F1D1D] 
-                                          text-black text-[12px] font-black tracking-widest rounded-lg transition-all 
-                                          hover:brightness-110 active:scale-[0.95] shadow-lg shadow-red-900/40 border border-red-700/50
-                                          before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
-                                          before:via-white/20 before:to-transparent before:translate-x-[-100%] 
-                                          hover:before:translate-x-[100%] before:transition-transform before:duration-700
-                                          after:absolute after:inset-0 after:bg-gradient-to-t after:from-white/10 after:via-transparent after:to-white/5"
+                                className="px-3 py-2 bg-[#EF4444] text-black text-xs font-bold tracking-widest rounded-full 
+                                          transition-all hover:bg-[#dc2626] active:scale-[0.98] active:bg-[#c82323] 
+                                          border border-white/5 disabled:opacity-50"
                               >
                                 Remove
                               </button>

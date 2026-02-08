@@ -46,6 +46,39 @@ const LiquidBackground = () => {
       `}} />
     </div>
   );
+  // <div className="fixed inset-0 z-0 bg-[#010203] overflow-hidden pointer-events-none">
+  //   <div className="absolute inset-0 opacity-70">
+  //     <div
+  //       className="absolute inset-0"
+  //       style={{
+  //         background: `linear-gradient(45deg, 
+  //           transparent 20%, 
+  //           rgba(211, 172, 44, 0.4) 50%, 
+  //           transparent 80%)`,
+  //         backgroundSize: '200% 200%',
+  //         animation: 'shimmer 8s linear infinite'
+  //       }}
+  //     />
+  //     <div
+  //       className="absolute inset-0"
+  //       style={{
+  //         background: `linear-gradient(-45deg, 
+  //           transparent 20%, 
+  //           rgba(211, 172, 44, 0.25) 50%, 
+  //           transparent 80%)`,
+  //         backgroundSize: '200% 200%',
+  //         animation: 'shimmer 12s linear infinite reverse'
+  //       }}
+  //     />
+  //   </div>
+  //   <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-[#D3AC2C]/15 to-transparent" />
+  //   <style dangerouslySetInnerHTML={{ __html: `
+  //     @keyframes shimmer {
+  //       0% { background-position: 0% 0%; }
+  //       100% { background-position: 200% 200%; }
+  //     }
+  //   `}} />
+  // </div>
 };
 
 export default LiquidBackground;

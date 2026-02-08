@@ -2,7 +2,7 @@ import { convertCurrency, calculateAverageBuyPrice } from './CostBasis';
 
 export const calculateFIFOMetrics = async (transactions, targetCurrency = 'USD') => {
   if (!transactions || transactions.length === 0) {
-    return { costBasis: 0, amount: 0, realizedPnL: 0, firstDate: null, avgBuy: 0 };
+    return { costBasis: 0, amount: 0, realizedPnL: 0, firstDate: null, avgBuy: 0, convertedTransactions: [] };
   }
 
   const sortedTxs = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -10,9 +10,10 @@ export const calculateFIFOMetrics = async (transactions, targetCurrency = 'USD')
   
   let buyLots = [];
   let totalRealizedPnL = 0;
+  let convertedTransactions = []; // To store pre-calculated rows
 
   for (const tx of sortedTxs) {
-    // 1. Normalize the transaction price to the target switcher currency AT THE TIME of tx
+    // 1. Calculate the historical price in the TARGET (switcher) currency
     const normalizedPrice = await convertCurrency(
       tx.amount, 
       tx.price, 
@@ -20,6 +21,13 @@ export const calculateFIFOMetrics = async (transactions, targetCurrency = 'USD')
       targetCurrency, 
       tx.date
     );
+
+    // Store this pre-calculated data for the UI
+    convertedTransactions.push({
+      ...tx,
+      displayPrice: normalizedPrice,
+      displayValue: normalizedPrice * tx.amount
+    });
 
     if (tx.type === 'BUY') {
       buyLots.push({
@@ -57,6 +65,7 @@ export const calculateFIFOMetrics = async (transactions, targetCurrency = 'USD')
     amount: totalRemainingAmount, 
     realizedPnL: totalRealizedPnL,
     firstDate: firstPurchaseDate,
-    avgBuy: avgBuy
+    avgBuy: avgBuy,
+    convertedTransactions
   };
 };

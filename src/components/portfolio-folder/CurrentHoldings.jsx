@@ -63,7 +63,7 @@ export default function CurrentHoldings({
 
       <div className="overflow-x-auto">
         <table className="w-full text-center tabular-nums border-collapse">
-          <thead className="text-zinc-600 text-[10px] tracking-widest uppercase border-b border-zinc-900">
+          <thead className="text-zinc-400 text-[10px] tracking-widest uppercase border-b border-zinc-900">
             <tr>
               <th className="pb-4 w-1/6">Asset</th>
               <th className="pb-4 w-1/12">Color</th>
@@ -130,7 +130,9 @@ export default function CurrentHoldings({
                     </td>
                     <td className="py-6 text-[#D3AC2C] font-bold">{formatValue(currentPrice, currency)}</td>
                     <td className="py-6 text-white font-bold">{formatValue(item.value, currency)}</td>
-                    <td className="py-6 text-zinc-500">{formatValue(item.avgBuy, currency)}</td>
+                    <td className="py-6 text-zinc-500">
+                      {formatValue(item.avgBuy, currency, false)} 
+                    </td>
                   </tr>
                 );
               })

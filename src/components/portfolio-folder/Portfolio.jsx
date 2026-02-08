@@ -16,6 +16,7 @@ import UpdatePrice from '../ui-button-folder/UpdatePrice';
 import { calculateFIFOMetrics } from '../../data/algo-data/FIFO'
 import { getAssetInfo } from '../../data/algo-data/GetAssetInfo';
 import { updateAllPrices } from '../../data/price-api-data/priceUpdater';
+import { convertCurrency } from '../../data/algo-data/CostBasis';
 
 const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterList, currency, setCurrency, rates }) => {
   const [hoveredCurrency, setHoveredCurrency] = useState(null);
@@ -241,9 +242,12 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
     );
   }, [activePortfolio]);
 
-  const formatValue = useCallback((val, curr) => {
-    const converted = val * (currentRates[curr] || 1);
+  const formatValue = useCallback((val, curr, isAlreadyConverted = false) => {
+    // If isAlreadyConverted is true, we skip multiplying by currentRates
+    const converted = isAlreadyConverted ? val : val * (currentRates[curr] || 1);
+    
     const noDecimalCurrencies = ['IDR', 'JPY'];
+    const getLocale = (c) => (c === 'IDR' ? 'id-ID' : 'en-US');
 
     if (noDecimalCurrencies.includes(curr)) {
       return new Intl.NumberFormat(getLocale(curr), {
@@ -253,7 +257,6 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         maximumFractionDigits: 0
       }).format(Math.round(converted));
     } else {
-      // Untuk USD/CAD - gunakan ABSOLUTE VALUE untuk pengecekan
       const absoluteValue = Math.abs(converted);
       const isSmallValue = absoluteValue < 2;
       const decimals = isSmallValue ? 5 : 2;
@@ -265,7 +268,7 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         maximumFractionDigits: decimals
       }).format(converted);
     }
-  }, [currentRates, getLocale]);
+  }, [currentRates]);
 
   const totalValue = useMemo(() => 
     sortedAssets.reduce((acc, item) => acc + item.value, 0), 
@@ -333,36 +336,49 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
     return COLOR_OPTIONS[0];
   };
 
-  const handleAddAsset = (e) => {
+  const handleAddAsset = async (e) => {
     e.preventDefault();
+    
     const rawPrice = newAsset.buyPrice.replace(/[^0-9.]/g, '');
-    if (!rawPrice || !newAsset.amount || !newAsset.name) return;
+    if (!rawPrice || !newAsset.amount || !newAsset.name) {
+      alert("Please fill in all fields correctly.");
+      return;
+    }
 
-    const assetColor = newAsset.color || getAssetColor(newAsset.name);
-    const txPriceInOriginalCurrency = parseFloat(rawPrice);
-    const exchangeRateAtTransaction = rates[newAsset.currency] || 1;
-    const txPriceInUSD = txPriceInOriginalCurrency / exchangeRateAtTransaction;
-    const txQty = parseFloat(newAsset.amount);
-    const txValueInUSD = txPriceInUSD * txQty;
+    try {
+      // --- REMOVED THE MANUAL FETCH (Line 355-365) ---
+      // Instead, use your robust convertCurrency utility which has the 5-day fallbac
 
-    const assetInfo = getAssetInfo(newAsset.name);
-    const assetName = assetInfo?.name || newAsset.name;
+      const txPriceInOriginalCurrency = parseFloat(rawPrice);
+      const txPriceInUSD = await convertCurrency(
+        parseFloat(newAsset.amount),
+        txPriceInOriginalCurrency,
+        newAsset.currency,
+        'USD',
+        newAsset.purchaseDate
+      );
 
-    const currentMarketPrice = assetInfo?.type === 'crypto' 
-      ? realTimePrices[assetName] || txPriceInUSD 
-      : txPriceInUSD;
+      const txQty = parseFloat(newAsset.amount);
+      const txValueInUSD = txPriceInUSD * txQty;
 
-    // Use functional update to prevent state overwrites from multiple tabs/intervals
-    setPortfolios(prevPortfolios => {
-      const updatedPortfolios = JSON.parse(JSON.stringify(prevPortfolios));
-      const portfolioIndex = updatedPortfolios.findIndex(p => p.id === activePortfolioId);
-      
-      if (portfolioIndex === -1) return prevPortfolios;
-      
-      const portfolio = updatedPortfolios[portfolioIndex];
-      const existingAssetIndex = portfolio.assets.findIndex(a => a.name === assetName);
 
-      // Create the new transaction object
+      // 4. Resolve Asset Information
+      const assetColor = newAsset.color || getAssetColor(newAsset.name);
+      const assetInfo = getAssetInfo(newAsset.name);
+      const assetName = assetInfo?.name || newAsset.name;
+
+      // Use real-time price if available, otherwise default to the purchase price in USD
+      const currentMarketPrice = realTimePrices[assetName] || txPriceInUSD;
+
+      // 5. Prepare Transaction for FIFO Logic
+      const portfolio = portfolios.find(p => p.id === activePortfolioId);
+      const existingAsset = portfolio?.assets.find(a => a.name === assetName);
+
+      // Calculate the effective exchange rate for your history logs
+      const effectiveExchangeRate = txPriceInOriginalCurrency > 0 
+        ? txPriceInUSD / txPriceInOriginalCurrency 
+        : 1;
+
       const newTransaction = {
         id: Date.now(),
         date: newAsset.purchaseDate,
@@ -370,65 +386,67 @@ const Portfolio = ({ portfolios, setPortfolios, assetMasterList, setAssetMasterL
         price: txPriceInOriginalCurrency,
         priceUSD: txPriceInUSD,
         currency: newAsset.currency,
-        exchangeRate: exchangeRateAtTransaction,
+        exchangeRate: effectiveExchangeRate, // Use the calculated rate here
         amount: txQty,
         value: txValueInUSD
       };
 
-      if (existingAssetIndex !== -1) {
-        const existingAsset = portfolio.assets[existingAssetIndex];
-        const updatedTransactions = [...(existingAsset.transactions || []), newTransaction];
+      const updatedTransactions = existingAsset 
+        ? [...(existingAsset.transactions || []), newTransaction]
+        : [newTransaction];
+
+      // 6. Recalculate Metrics (Awaiting the async conversion logic inside FIFO)
+      const metrics = await calculateFIFOMetrics(updatedTransactions, 'USD');
+
+      // 7. Update State
+      setPortfolios(prevPortfolios => {
+        const updatedPortfolios = JSON.parse(JSON.stringify(prevPortfolios));
+        const portfolioIndex = updatedPortfolios.findIndex(p => p.id === activePortfolioId);
+        if (portfolioIndex === -1) return prevPortfolios;
         
-        // Calculate new metrics using FIFO
-        const { costBasis, amount, firstDate } = calculateFIFOMetrics(updatedTransactions);
+        const p = updatedPortfolios[portfolioIndex];
+        const existingIndex = p.assets.findIndex(a => a.name === assetName);
 
-        if (amount <= 0) {
-          // Remove asset if balance hits zero
-          portfolio.assets.splice(existingAssetIndex, 1);
+        if (metrics.amount <= 0) {
+          // If selling all, remove the asset
+          if (existingIndex !== -1) p.assets.splice(existingIndex, 1);
         } else {
-          portfolio.assets[existingAssetIndex] = {
-            ...existingAsset,
-            amount: amount,
-            value: currentMarketPrice * amount,
-            avgBuy: amount > 0 ? costBasis / amount : 0, // Avoid division by zero
+          const assetData = {
+            name: assetName,
+            symbol: assetInfo?.symbol || '',
+            value: currentMarketPrice * metrics.amount, 
+            avgBuy: metrics.avgBuy,
+            amount: metrics.amount,
+            color: assetColor,
+            purchaseDate: metrics.firstDate,
             transactions: updatedTransactions,
-            color: newAsset.color || existingAsset.color,
-            currencyMix: {
-              ...(existingAsset.currencyMix || {}),
-              [newAsset.currency]: (existingAsset.currencyMix?.[newAsset.currency] || 0) + (newAsset.type === 'BUY' ? txValueInUSD : -txValueInUSD)
-            },
-            purchaseDate: firstDate || existingAsset.purchaseDate // Add this
+            currencyMix: { [newAsset.currency]: txValueInUSD }
           };
+
+          if (existingIndex !== -1) {
+            p.assets[existingIndex] = { ...p.assets[existingIndex], ...assetData };
+          } else {
+            p.assets.push({ id: Date.now(), ...assetData });
+          }
         }
-      } else if (newAsset.type === 'BUY') {
-        // Create new asset entry
-        portfolio.assets.push({
-          id: Date.now(),
-          name: assetName,
-          symbol: assetInfo?.symbol || '',
-          value: currentMarketPrice * txQty,
-          avgBuy: txPriceInUSD,
-          amount: txQty,
-          color: assetColor,
-          purchaseDate: newAsset.purchaseDate,
-          transactions: [newTransaction],
-          currencyMix: { [newAsset.currency]: txValueInUSD }
-        });
-      }
+        return updatedPortfolios;
+      });
 
-      return updatedPortfolios;
-    });
-
-    // Reset form
-    setNewAsset({ 
-      name: 'Bitcoin (BTC)', 
-      buyPrice: '', 
-      amount: '', 
-      currency: 'USD', 
-      type: 'BUY',
-      color: null,
-      purchaseDate: new Date().toISOString().split('T')[0]
-    });
+      // 8. Success: Reset the form
+      setNewAsset({ 
+        name: 'Bitcoin (BTC)', 
+        buyPrice: '', 
+        amount: '', 
+        currency: 'USD', 
+        type: 'BUY',
+        color: null,
+        purchaseDate: new Date().toISOString().split('T')[0]
+      });
+      
+    } catch (error) {
+      console.error("Error adding asset:", error);
+      alert("Backend error: " + error.message);
+    }
   };
 
   // Update asset color

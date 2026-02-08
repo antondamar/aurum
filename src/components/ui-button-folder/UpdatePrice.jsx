@@ -21,13 +21,9 @@ export default function UpdatePrice({
       <button
         onClick={updateAllPrices}
         disabled={isUpdatingPrices || assetCount === 0}
-        className="relative overflow-hidden bg-gradient-to-br from-[#F9E08B] via-[#D3AC2C] to-[#A57A03] 
-           text-black text-xs font-bold px-4 py-2 rounded-lg transition-all 
-           disabled:opacity-50 flex items-center gap-2 hover:brightness-110 
-           active:scale-[0.98] shadow-lg shadow-[#D3AC2C]/20 border border-[#F9E08B]/30
-           before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent 
-           before:via-white/20 before:to-transparent before:translate-x-[-100%] 
-           hover:before:translate-x-[100%] before:transition-transform before:duration-700"
+        className="relative overflow-hidden bg-[#D3AC2C] text-[13px] font-bold px-4 py-2 rounded-full 
+                  transition-all disabled:opacity-50 flex items-center gap-2 border border-white/5
+                  hover:bg-[#af902b] active:scale-[0.98] text-black"
       >
         {isUpdatingPrices ? (
           <>

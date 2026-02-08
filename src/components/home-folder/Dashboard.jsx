@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { calculateFIFOMetrics } from '../../data/algo-data/FIFO'
 
 const Dashboard = ({ profileData, portfolios, currency, rates }) => {
   const [greeting, setGreeting] = useState('');
+  const [isCalculating, setIsCalculating] = useState(true);
   const [dashboardData, setDashboardData] = useState({
     totalNetWorth: 0,
     totalReturnPercentage: 0,
@@ -60,140 +62,105 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
 
   // Calculate dashboard data from portfolios
   useEffect(() => {
-    // Filter portfolios that should be counted in dashboard
-    const countedPortfolios = portfolios.filter(p => p.countInDashboard !== false);
-    
-    if (countedPortfolios && countedPortfolios.length > 0) {
-      let totalNetWorth = 0;
-      let totalCostBasis = 0;
-      let allAssets = [];
-      let assetsCount = 0;
-      let portfolioDistribution = {};
-      let assetTypeValues = {
-        crypto: { totalValue: 0, totalCost: 0, assets: [] },
-        stocks: { totalValue: 0, totalCost: 0, assets: [] },
-        cash: { totalValue: 0, totalCost: 0, assets: [] },
-        other: { totalValue: 0, totalCost: 0, assets: [] }
-      };
+    const calculateDashboard = async () => {
+      setIsCalculating(true);
+      const countedPortfolios = portfolios.filter(p => p.countInDashboard !== false);
+      
+      if (countedPortfolios.length > 0) {
+        // 1. Create a flattened list of all asset calculation promises
+        const assetPromises = countedPortfolios.flatMap(portfolio => 
+          portfolio.assets.map(async (asset) => {
+            // FIFO calculations now run in parallel across all assets
+            const fifoData = await calculateFIFOMetrics(asset.transactions || [], currency);
+            const assetType = getAssetType(asset.name);
+            const assetValue = asset.value || 0;
+            const assetCost = fifoData.costBasis;
+            const changePercent = assetCost > 0 ? ((assetValue - assetCost) / assetCost) * 100 : 0;
 
-      // Process each counted portfolio
-      countedPortfolios.forEach(portfolio => {
-        const portfolioValue = portfolio.assets.reduce((sum, asset) => sum + (asset.value || 0), 0);
-        const portfolioCost = portfolio.assets.reduce((sum, asset) => sum + (asset.avgBuy || 0) * (asset.amount || 0), 0);
-        
-        portfolioDistribution[portfolio.name || `Portfolio ${portfolio.id}`] = {
-          value: portfolioValue,
-          cost: portfolioCost,
-          returnPercentage: portfolioCost > 0 ? ((portfolioValue - portfolioCost) / portfolioCost) * 100 : 0,
-          assetCount: portfolio.assets.length,
-          isCounted: true
+            return {
+              ...asset,
+              type: assetType,
+              avgBuy: fifoData.avgBuy,
+              assetValue,
+              assetCost,
+              change: changePercent.toFixed(1),
+              changeValue: assetValue - assetCost,
+              portfolioName: portfolio.name || `Portfolio ${portfolio.id}`
+            };
+          })
+        );
+
+        // 2. Wait for all parallel calculations to resolve
+        const resolvedAssets = await Promise.all(assetPromises);
+
+        // 3. Aggregate the results (Synchronous)
+        let totalNetWorth = 0;
+        let totalCostBasis = 0;
+        let assetsCount = resolvedAssets.length;
+        let portfolioDistribution = {};
+        let assetTypeValues = {
+          crypto: { totalValue: 0, totalCost: 0, assets: [] },
+          stocks: { totalValue: 0, totalCost: 0, assets: [] },
+          cash: { totalValue: 0, totalCost: 0, assets: [] },
+          other: { totalValue: 0, totalCost: 0, assets: [] }
         };
 
-        // Process each asset in portfolio
-        portfolio.assets.forEach(asset => {
-          const assetValue = asset.value || 0;
-          const assetCost = (asset.avgBuy || 0) * (asset.amount || 0);
-          
-          totalNetWorth += assetValue;
-          totalCostBasis += assetCost;
-          assetsCount++;
-          
-          // Get asset info for grouping
-          const assetType = getAssetType(asset.name);
-          const assetChange = calculateAssetChange(asset);
-          
-          const assetData = {
-            ...asset,
-            type: assetType,
-            allocation: 0, // Will calculate after total is known
-            change: assetChange,
-            changeValue: assetValue - assetCost,
-            portfolio: portfolio.name || `Portfolio ${portfolio.id}`
-          };
-          
-          allAssets.push(assetData);
-          
-          // Aggregate by type
-          if (assetTypeValues[assetType]) {
-            assetTypeValues[assetType].totalValue += assetValue;
-            assetTypeValues[assetType].totalCost += assetCost;
-            assetTypeValues[assetType].assets.push(assetData);
-          } else {
-            assetTypeValues.other.totalValue += assetValue;
-            assetTypeValues.other.totalCost += assetCost;
-            assetTypeValues.other.assets.push(assetData);
+        resolvedAssets.forEach(asset => {
+          totalNetWorth += asset.assetValue;
+          totalCostBasis += asset.assetCost;
+
+          // Grouping for Asset Type Breakdown
+          const targetType = assetTypeValues[asset.type] ? asset.type : 'other';
+          assetTypeValues[targetType].totalValue += asset.assetValue;
+          assetTypeValues[targetType].totalCost += asset.assetCost;
+          assetTypeValues[targetType].assets.push(asset);
+
+          // Aggregate Portfolio Distribution
+          if (!portfolioDistribution[asset.portfolioName]) {
+            portfolioDistribution[asset.portfolioName] = { value: 0, cost: 0, assetCount: 0, isCounted: true };
           }
+          portfolioDistribution[asset.portfolioName].value += asset.assetValue;
+          portfolioDistribution[asset.portfolioName].cost += asset.assetCost;
+          portfolioDistribution[asset.portfolioName].assetCount += 1;
         });
-      });
 
-      // Calculate allocation for each asset
-      if (totalNetWorth > 0) {
-        allAssets = allAssets.map(asset => ({
-          ...asset,
-          allocation: ((asset.value / totalNetWorth) * 100).toFixed(1)
-        }));
-      }
+        // 4. Final Processing & State Update
+        const totalReturnPercentage = totalCostBasis > 0 
+          ? ((totalNetWorth - totalCostBasis) / totalCostBasis) * 100 
+          : 0;
 
-      // Group by type
-      const groupedHoldings = groupAssetsByType(allAssets);
+        const groupedHoldings = groupAssetsByType(resolvedAssets.map(a => ({
+          ...a,
+          allocation: totalNetWorth > 0 ? ((a.assetValue / totalNetWorth) * 100).toFixed(1) : 0,
+          portfolio: a.portfolioName // Match your existing naming convention
+        })));
 
-      // Calculate total return percentage
-      const totalReturnPercentage = totalCostBasis > 0 
-        ? ((totalNetWorth - totalCostBasis) / totalCostBasis) * 100 
-        : 0;
+        const aggregatedStats = calculateAggregatedStats(
+          resolvedAssets, 
+          groupedHoldings, 
+          totalNetWorth, 
+          totalCostBasis,
+          assetTypeValues,
+          portfolioDistribution
+        );
 
-      // Calculate aggregated statistics
-      const aggregatedStats = calculateAggregatedStats(
-        allAssets, 
-        groupedHoldings, 
-        totalNetWorth, 
-        totalCostBasis,
-        assetTypeValues,
-        portfolioDistribution
-      );
-
-      setDashboardData({
-        totalNetWorth,
-        totalReturnPercentage,
-        assetsCount,
-        portfolioCount: portfolios.length,
-        portfolioHoldings: groupedHoldings,
-        totalCostBasis,
-        aggregatedStats
-      });
-    } else {
-        // Handle case when no portfolios are counted
         setDashboardData({
-          totalNetWorth: 0,
-          totalReturnPercentage: 0,
-          assetsCount: 0,
-          portfolioCount: 0,
-          portfolioHoldings: {
-            crypto: [],
-            stocks: []
-          },
-          totalCostBasis: 0,
-          aggregatedStats: {
-            bestPerformingAsset: null,
-            worstPerformingAsset: null,
-            largestHolding: null,
-            smallestHolding: null,
-            portfolioDistribution: {},
-            assetTypeBreakdown: {
-              crypto: { count: 0, value: 0, percentage: 0 },
-              stocks: { count: 0, value: 0, percentage: 0 },
-              other: { count: 0, value: 0, percentage: 0 }
-            },
-            performanceByType: {
-              crypto: { totalReturn: 0, avgReturn: 0 },
-              stocks: { totalReturn: 0, avgReturn: 0 }
-            },
-            monthlyChange: 0,
-            dailyChange: 0
-          }
+          totalNetWorth,
+          totalReturnPercentage,
+          assetsCount,
+          portfolioCount: portfolios.length,
+          portfolioHoldings: groupedHoldings,
+          totalCostBasis,
+          aggregatedStats
         });
+      } else {
+        setDashboardData(initialDashboardState);
       }
-    }, [portfolios]);
+      setIsCalculating(false);
+    };
+
+    calculateDashboard();
+  }, [portfolios, currency]);
 
   // Calculate aggregated statistics
   const calculateAggregatedStats = (allAssets, groupedHoldings, totalNetWorth, totalCostBasis, assetTypeValues, portfolioDistribution) => {
@@ -374,6 +341,17 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
     return `${sign}${val.toFixed(1)}%`;
   };
 
+  if (isCalculating) {
+    return (
+      <div className="pt-24 px-8 max-w-7xl mx-auto pb-32 flex items-center justify-center h-[70vh]">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#D3AC2C] mb-4"></div>
+          <p className="text-zinc-400 font-bold uppercase tracking-widest text-xs">Synchronizing Portfolio Data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 max-w-7xl mx-auto pt-24">
       <title>Home</title>
@@ -439,11 +417,18 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
           <p className="text-zinc-400 text-sm">Best Performer</p>
           {dashboardData.aggregatedStats.bestPerformingAsset ? (
             <>
-              <h2 className="text-2xl font-bold mt-2 text-emerald-400">
+              <h2 className={`text-2xl font-bold mt-2 ${
+                parseFloat(dashboardData.aggregatedStats.bestPerformingAsset.change) > 0 ? 'text-emerald-400' : 
+                parseFloat(dashboardData.aggregatedStats.bestPerformingAsset.change) < 0 ? 'text-red-400' : 'text-white'
+              }`}>
                 {dashboardData.aggregatedStats.bestPerformingAsset.name}
               </h2>
-              <p className="text-emerald-400 text-sm font-medium">
-                +{parseFloat(dashboardData.aggregatedStats.bestPerformingAsset.change).toFixed(1)}%
+              <p className={`text-sm font-medium ${
+                parseFloat(dashboardData.aggregatedStats.bestPerformingAsset.change) > 0 ? 'text-emerald-400' : 
+                parseFloat(dashboardData.aggregatedStats.bestPerformingAsset.change) < 0 ? 'text-red-400' : 'text-white'
+              }`}>
+                {/* Removed the fixed '+' sign */}
+                {parseFloat(dashboardData.aggregatedStats.bestPerformingAsset.change).toFixed(1)}%
               </p>
               <p className="text-zinc-500 text-xs mt-1">
                 Value: {formatValue(dashboardData.aggregatedStats.bestPerformingAsset.value, currency)}
@@ -459,10 +444,16 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
           <p className="text-zinc-400 text-sm">Worst Performer</p>
           {dashboardData.aggregatedStats.worstPerformingAsset ? (
             <>
-              <h2 className="text-2xl font-bold mt-2 text-red-400">
+              <h2 className={`text-2xl font-bold mt-2 ${
+                parseFloat(dashboardData.aggregatedStats.worstPerformingAsset.change) > 0 ? 'text-emerald-400' : 
+                parseFloat(dashboardData.aggregatedStats.worstPerformingAsset.change) < 0 ? 'text-red-400' : 'text-white'
+              }`}>
                 {dashboardData.aggregatedStats.worstPerformingAsset.name}
               </h2>
-              <p className="text-red-400 text-sm font-medium">
+              <p className={`text-sm font-medium ${
+                parseFloat(dashboardData.aggregatedStats.worstPerformingAsset.change) > 0 ? 'text-emerald-400' : 
+                parseFloat(dashboardData.aggregatedStats.worstPerformingAsset.change) < 0 ? 'text-red-400' : 'text-white'
+              }`}>
                 {parseFloat(dashboardData.aggregatedStats.worstPerformingAsset.change).toFixed(1)}%
               </p>
               <p className="text-zinc-500 text-xs mt-1">
@@ -530,7 +521,7 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
 
             <div>
               <div className="flex justify-between text-sm">
-                <span className="text-zinc-300">Forex</span>
+                <span className="text-zinc-300">Cash</span>
                 <span className="gold-text">
                   {dashboardData.aggregatedStats.assetTypeBreakdown.cash.percentage.toFixed(1)}%
                 </span>
@@ -593,7 +584,7 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
         </div>
 
         <div className="aurum-card p-6 rounded-2xl">
-          <h3 className="font-bold text-lg mb-4">Forex Performance</h3>
+          <h3 className="font-bold text-lg mb-4">Cash Performance</h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-zinc-400">Total Return</span>
@@ -711,12 +702,11 @@ const Dashboard = ({ profileData, portfolios, currency, rates }) => {
           </div>
         )}
 
-        {/* Forex Assets Section inside Portfolio Holdings (around line 555) */}
         {dashboardData.portfolioHoldings.cash && dashboardData.portfolioHoldings.cash.length > 0 && (
           <div className="mb-6">
             <div className="p-4 bg-zinc-900/50 border-b border-zinc-800">
               <h4 className="font-bold gold-text text-sm uppercase tracking-wider">
-                Forex & Cash ({dashboardData.portfolioHoldings.cash.length})
+                Cash ({dashboardData.portfolioHoldings.cash.length})
               </h4>
             </div>
             <table className="w-full text-left">

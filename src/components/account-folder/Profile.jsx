@@ -167,13 +167,9 @@ const Profile = ({ profileData, setProfileData }) => {
         <button 
           onClick={handleUpdate} 
           disabled={isChecking}
-          className="relative overflow-hidden isolate w-full bg-gradient-to-br from-[#FDE68A] via-[#D3AC2C] to-[#A57A03] 
-                    text-black text-[11px] font-black uppercase tracking-widest py-4 rounded-xl transition-all 
-                    hover:brightness-110 active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-yellow-600/20 
-                    border border-[#FDE68A]/30 flex items-center justify-center gap-3
-                    before:absolute before:inset-0 before:-z-10 before:bg-gradient-to-r before:from-transparent 
-                    before:via-white/40 before:to-transparent before:translate-x-[-100%] 
-                    hover:before:translate-x-[100%] before:transition-transform before:duration-700"
+          className="w-full bg-[#D3AC2C] text-black text-xs font-bold uppercase tracking-widest py-4 rounded-full 
+                    transition-all hover:bg-[#af902b] active:bg-[#9a7f26] active:scale-[0.98] 
+                    disabled:opacity-50 border border-white/5 flex items-center justify-center gap-3"
         >
           {isChecking && (
             <svg className="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
